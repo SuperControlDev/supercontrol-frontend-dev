@@ -1,0 +1,25 @@
+.home-page {
+  min-height: 100vh;
+  display: flex;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* PC 레이아웃: 좌우 분할 */
+@media (min-width: 1025px) {
+  .home-page {
+    flex-direction: row;
+  }
+}
+
+/* 모바일 레이아웃: 오른쪽만 표시 */
+@media (max-width: 1024px) {
+  .home-page {
+    flex-direction: column;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+}
+
+

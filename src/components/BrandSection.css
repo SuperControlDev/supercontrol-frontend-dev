@@ -1,0 +1,153 @@
+.brand-section {
+  background: #000;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 80px;
+  position: relative;
+  width: 60%;
+  flex-shrink: 0;
+}
+
+.brand-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  max-width: 600px;
+  width: 100%;
+}
+
+.brand-top {
+  margin-bottom: 60px;
+}
+
+.brand-tagline {
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.brand-logo-section {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 80px;
+}
+
+.brand-icon {
+  flex-shrink: 0;
+}
+
+.pink-square {
+  width: 80px;
+  height: 80px;
+  background: #ff1493;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.play-icon {
+  color: white;
+  font-size: 32px;
+  margin-left: 4px;
+}
+
+.brand-title {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title-line {
+  color: white;
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  line-height: 1.1;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.brand-slogan {
+  margin-bottom: auto;
+}
+
+.slogan-english {
+  color: white;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin: 0 0 16px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.slogan-korean {
+  color: white;
+  font-size: 18px;
+  font-weight: 400;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.brand-footer {
+  margin-top: auto;
+  padding-top: 40px;
+}
+
+.social-icons {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.social-icon {
+  color: white;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+
+.social-icon:hover {
+  opacity: 0.7;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.footer-link {
+  color: white;
+  font-size: 14px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.footer-link:hover {
+  opacity: 0.7;
+}
+
+.link-separator {
+  color: white;
+  font-size: 14px;
+}
+
+@media (max-width: 1024px) {
+  .brand-section {
+    display: none;
+  }
+}
+

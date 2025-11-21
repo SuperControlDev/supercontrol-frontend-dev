@@ -1,0 +1,75 @@
+.game-status {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.game-status h3 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.status-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.status-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.status-value {
+  font-weight: 600;
+  color: #333;
+}
+
+.game-state-info {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.game-state-info h4 {
+  color: #333;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.position-info {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.position-item {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  background: #f9f9f9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.claw-state {
+  padding: 8px;
+  background: #e3f2fd;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+}
+

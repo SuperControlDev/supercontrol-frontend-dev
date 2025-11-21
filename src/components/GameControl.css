@@ -1,0 +1,125 @@
+.game-control {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.game-control h3 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 20px;
+}
+
+.control-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.direction-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.horizontal-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-center {
+  width: 60px;
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+}
+
+.control-button {
+  width: 60px;
+  height: 60px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-button:hover:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.control-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-button.large {
+  width: 100%;
+  height: 60px;
+  font-size: 18px;
+}
+
+.height-control {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-control {
+  display: flex;
+  gap: 12px;
+}
+
+.action-button {
+  flex: 1;
+  height: 60px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.action-button.grab {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  border: none;
+}
+
+.action-button.grab:hover:not(:disabled) {
+  background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+}
+
+.action-button.drop {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  color: white;
+  border: none;
+}
+
+.action-button.drop:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d32f2f 0%, #c62828 100%);
+}
+
+.control-disabled-message {
+  margin-top: 16px;
+  padding: 12px;
+  background: #fff3cd;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.control-disabled-message p {
+  color: #856404;
+  font-size: 14px;
+}
+

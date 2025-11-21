@@ -1,0 +1,347 @@
+.mobile-app-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background: #f5f5f5;
+  width: 40%;
+  flex-shrink: 0;
+}
+
+.mobile-frame {
+  width: 100%;
+  max-width: 420px;
+  background: #f0f0f0;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  height: 800px;
+  max-height: 800px;
+}
+
+/* 상태 바 */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #000;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.status-icons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.status-icon {
+  font-size: 12px;
+}
+
+/* 헤더 */
+.mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.app-logo {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+.user-profile-button {
+  background: none;
+  border: none;
+  color: #333;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 콘텐츠 영역 */
+.mobile-content {
+  flex: 1;
+  padding: 16px;
+  padding-bottom: 8px;
+  background: #f5f5f5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* iOS 부드러운 스크롤 */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #ccc transparent; /* Firefox */
+  min-height: 0; /* flexbox에서 스크롤을 위해 필요 */
+}
+
+/* Webkit 브라우저 스크롤바 스타일 */
+.mobile-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mobile-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mobile-content::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.mobile-content::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.game-card {
+  background: white;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.game-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.live-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: #4CAF50;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.card-viewers {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+}
+
+.eye-icon {
+  font-size: 12px;
+}
+
+.card-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e0e0e0 0%, #d0d0d0 100%);
+}
+
+.mountain-icon {
+  font-size: 48px;
+  opacity: 0.5;
+}
+
+.card-profile {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ddd;
+  border: 2px solid white;
+}
+
+.card-content {
+  padding-left: 0;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 4px 0;
+}
+
+.card-description {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.card-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.card-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.card-tag {
+  background: #f0f0f0;
+  color: #666;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 게임하기 버튼 컨테이너 - 고정 위치 */
+.play-game-button-container {
+  padding: 16px;
+  background: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+/* 게임하기 버튼 */
+.play-game-button {
+  width: 100%;
+  padding: 16px;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.play-game-button:hover {
+  background: #d0d0d0;
+  transform: translateY(-2px);
+}
+
+.play-game-button:active {
+  transform: translateY(0);
+}
+
+.gamepad-icon {
+  font-size: 20px;
+}
+
+/* 하단 네비게이션 */
+.mobile-nav {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 12px 0;
+  background: #2c2c2c;
+  border-top: 1px solid #3c3c3c;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #999;
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 4px 16px;
+}
+
+.nav-item:hover {
+  color: #ccc;
+}
+
+.nav-item.active {
+  color: white;
+}
+
+.nav-item span {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+@media (max-width: 1024px) {
+  .mobile-app-section {
+    padding: 0;
+    background: #f5f5f5;
+    width: 100%;
+    min-height: calc(100vh + 80px);
+    height: calc(100vh + 80px);
+    max-height: calc(100vh + 80px);
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  
+  .mobile-frame {
+    max-width: 100%;
+    border-radius: 0;
+    height: calc(100vh + 80px);
+    max-height: calc(100vh + 80px);
+    min-height: calc(100vh + 80px);
+  }
+
+  /* 모바일에서 더 긴 콘텐츠를 위해 패딩 조정 */
+  .mobile-content {
+    padding-bottom: 40px;
+  }
+}
+
