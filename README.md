@@ -1,140 +1,139 @@
-# 远程抓娃娃服务前端
+# 원격 인형뽑기 서비스 프론트엔드
 
-基于 React + TypeScript 开发的远程抓娃娃服务前端应用。
+React + TypeScript로 개발된 원격 인형뽑기 서비스 프론트엔드 애플리케이션입니다.
 
-## 技术栈
+## 기술 스택
 
-- **React 18** - UI框架
-- **TypeScript** - 类型安全
-- **Vite** - 构建工具
-- **Socket.io Client** - WebSocket通信
-- **React Router** - 路由管理
+- **React 18** - UI 프레임워크
+- **TypeScript** - 타입 안전성
+- **Vite** - 빌드 도구
+- **Socket.io Client** - WebSocket 통신
+- **React Router** - 라우팅 관리
 
-## 项目结构
+## 프로젝트 구조
 
 ```
 src/
-├── components/          # 组件
-│   ├── GameControl.tsx  # 游戏控制面板
-│   ├── GameStatus.tsx   # 游戏状态显示
-│   └── GameVideo.tsx    # 视频流显示
+├── components/          # 컴포넌트
+│   ├── GameControl.tsx  # 게임 제어 패널
+│   ├── GameStatus.tsx   # 게임 상태 표시
+│   └── GameVideo.tsx    # 비디오 스트림 표시
 ├── contexts/            # Context
-│   └── SocketContext.tsx # Socket连接管理
-├── pages/               # 页面
-│   ├── LoginPage.tsx    # 登录页面
-│   ├── HomePage.tsx     # 主页（选择机器）
-│   └── GamePage.tsx     # 游戏页面
-├── types/               # 类型定义
-│   ├── session.ts       # Session数据结构
-│   └── socket.ts        # Socket事件类型
-├── App.tsx              # 主应用组件
-└── main.tsx             # 入口文件
+│   └── SocketContext.tsx # Socket 연결 관리
+├── pages/               # 페이지
+│   ├── LoginPage.tsx    # 로그인 페이지
+│   ├── HomePage.tsx     # 홈페이지 (기기 선택)
+│   └── GamePage.tsx     # 게임 페이지
+├── types/               # 타입 정의
+│   ├── session.ts       # Session 데이터 구조
+│   └── socket.ts        # Socket 이벤트 타입
+├── App.tsx              # 메인 애플리케이션 컴포넌트
+└── main.tsx             # 진입점 파일
 ```
 
-## 安装和运行
+## 설치 및 실행
 
-### 安装依赖
+### 의존성 설치
 
 ```bash
 npm install
 ```
 
-### 开发模式
+### 개발 모드
 
 ```bash
 npm run dev
 ```
 
-应用将在 http://localhost:3000 启动
+애플리케이션은 http://localhost:3000 에서 시작됩니다.
 
-### 构建生产版本
+### 프로덕션 빌드
 
 ```bash
 npm run build
 ```
 
-## 环境变量
+## 환경 변수
 
-创建 `.env` 文件配置Socket服务器地址：
+`.env` 파일을 생성하여 Socket 서버 주소를 설정합니다:
 
 ```
 VITE_SOCKET_URL=http://localhost:8080
 ```
 
-## 测试账号
+## 테스트 계정
 
-开发阶段可以使用以下测试账号登录：
+개발 단계에서 다음 테스트 계정을 사용하여 로그인할 수 있습니다:
 
-- **用户名**: `admin` / **密码**: `admin123`
-- **用户名**: `test` / **密码**: `test123`
-- **用户名**: `user` / **密码**: `user123`
+- **사용자명**: `admin` / **비밀번호**: `admin123`
+- **사용자명**: `test` / **비밀번호**: `test123`
+- **사용자명**: `user` / **비밀번호**: `user123`
 
-> 注意：这些测试账号仅用于开发测试，实际应用中应该连接后端API进行真实的用户认证。
+> 참고: 이러한 테스트 계정은 개발 테스트용으로만 사용되며, 실제 애플리케이션에서는 백엔드 API에 연결하여 실제 사용자 인증을 수행해야 합니다.
 
-## 功能特性
+## 기능 특성
 
-### 1. Socket通信模块
-- 自动连接/重连机制
-- Session管理（创建、加入、离开）
-- 游戏控制指令发送
-- 实时状态更新接收
+### 1. Socket 통신 모듈
+- 자동 연결/재연결 메커니즘
+- Session 관리 (생성, 참가, 나가기)
+- 게임 제어 명령 전송
+- 실시간 상태 업데이트 수신
 
-### 2. 页面功能
-- **登录页面**: 用户登录和Socket连接
-- **主页**: 机器列表和选择
-- **游戏页面**: 实时视频流、游戏控制和状态显示
+### 2. 페이지 기능
+- **로그인 페이지**: 사용자 로그인 및 Socket 연결
+- **홈페이지**: 기기 목록 및 선택
+- **게임 페이지**: 실시간 비디오 스트림, 게임 제어 및 상태 표시
 
-### 3. 游戏控制
-- 方向控制（前后左右）
-- 高度控制（上升下降）
-- 动作控制（抓取、放下）
+### 3. 게임 제어
+- 방향 제어 (앞뒤좌우)
+- 높이 제어 (상승/하강)
+- 동작 제어 (잡기, 놓기)
 
-## Socket事件
+## Socket 이벤트
 
-### 客户端发送
-- `session:create` - 创建Session
-- `session:join` - 加入Session
-- `session:leave` - 离开Session
-- `game:move` - 移动爪子
-- `game:drop` - 放下爪子
-- `game:grab` - 抓取
+### 클라이언트 전송
+- `session:create` - Session 생성
+- `session:join` - Session 참가
+- `session:leave` - Session 나가기
+- `game:move` - 클로 이동
+- `game:drop` - 클로 내리기
+- `game:grab` - 잡기
 
-### 服务器发送
-- `session:created` - Session创建成功
-- `session:joined` - 加入Session成功
-- `session:updated` - Session状态更新
-- `session:ended` - Session结束
-- `game:state` - 游戏状态更新
-- `game:result` - 游戏结果
-- `error` - 错误信息
+### 서버 전송
+- `session:created` - Session 생성 성공
+- `session:joined` - Session 참가 성공
+- `session:updated` - Session 상태 업데이트
+- `session:ended` - Session 종료
+- `game:state` - 게임 상태 업데이트
+- `game:result` - 게임 결과
+- `error` - 오류 정보
 
-## 开发说明
+## 개발 설명
 
-### Session数据结构
+### Session 데이터 구조
 
-参考 `src/types/session.ts` 中的类型定义，包括：
-- Session状态（idle, connecting, playing, ended）
-- 游戏状态（位置、爪子状态等）
-- 用户信息
-- 机器信息
+`src/types/session.ts`의 타입 정의를 참조하세요. 포함 내용:
+- Session 상태 (idle, connecting, playing, ended)
+- 게임 상태 (위치, 클로 상태 등)
+- 사용자 정보
+- 기기 정보
 
-### 自定义配置
+### 사용자 정의 설정
 
-根据实际后端接口调整：
-1. Socket服务器地址（`src/contexts/SocketContext.tsx`）
-2. 事件名称和数据结构（`src/types/socket.ts`）
-3. 视频流URL获取逻辑（`src/components/GameVideo.tsx`）
+실제 백엔드 인터페이스에 따라 조정:
+1. Socket 서버 주소 (`src/contexts/SocketContext.tsx`)
+2. 이벤트 이름 및 데이터 구조 (`src/types/socket.ts`)
+3. 비디오 스트림 URL 가져오기 로직 (`src/components/GameVideo.tsx`)
 
-## 待完成功能
+## 미완성 기능
 
-- [ ] 视频流集成（WebRTC/HLS）
-- [ ] 用户认证和授权
-- [ ] 余额管理
-- [ ] 游戏记录和历史
-- [ ] 错误处理和重试机制
-- [ ] 响应式设计优化
+- [ ] 비디오 스트림 통합 (WebRTC/HLS)
+- [ ] 사용자 인증 및 권한 부여
+- [ ] 잔액 관리
+- [ ] 게임 기록 및 이력
+- [ ] 오류 처리 및 재시도 메커니즘
+- [ ] 반응형 디자인 최적화
 
 ## License
 
 MIT
-
