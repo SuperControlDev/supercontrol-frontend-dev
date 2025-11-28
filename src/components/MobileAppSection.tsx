@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '@/contexts/SocketContext';
+import { MachineStatus } from '@/types/session';
 import './MobileAppSection.css';
 
 interface GameCard {
@@ -12,12 +13,32 @@ interface GameCard {
   isLive: boolean;
   tags: string[];
   imageUrl?: string;
+  machineId: string | number; // API에서 받은 실제 machineId
+}
+
+// API에서 받은 기계 데이터 타입
+interface ApiMachine {
+  id?: number;
+  machineId?: number;
+  publicId?: string;
+  name: string;
+  status?: string; // "AVAILABLE" | "BUSY" | "MAINTENANCE"
+  price?: number;
+  thumbnailUrl?: string;
+  description?: string;
+  viewers?: number;
+  tags?: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const MobileAppSection: React.FC = () => {
   const navigate = useNavigate();
   const { isConnected } = useSocket();
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [gameCards, setGameCards] = useState<GameCard[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   // 시스템 시간 업데이트
   useEffect(() => {
@@ -37,45 +58,76 @@ const MobileAppSection: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 게임 카드 데이터 (실제로는 백엔드에서 가져와야 함)
-  const gameCards: GameCard[] = [
-    {
-      id: 'game-001',
-      title: '블랙핑크 굿즈 뽑기',
-      description: '블랙핑크 굿즈를 뽑으면 응원봉을 배송',
-      price: 10,
-      viewers: 5,
-      isLive: true,
-      tags: ['인형뽑기', '응원봉 경품'],
-    },
-    {
-      id: 'game-002',
-      title: '케데헌 호랑이 뽑기',
-      description: '케데헌 호랑이를 뽑기 챌린지에 도전!',
-      price: 10,
-      viewers: 5,
-      isLive: true,
-      tags: ['인형뽑기', '응원봉 경품'],
-    },
-    {
-      id: 'game-003',
-      title: '프리미엄 인형 뽑기',
-      description: '특별한 프리미엄 인형을 뽑아보세요!',
-      price: 15,
-      viewers: 12,
-      isLive: true,
-      tags: ['인형뽑기', '프리미엄'],
-    },
-    {
-      id: 'game-004',
-      title: '한정판 굿즈 뽑기',
-      description: '한정판 굿즈를 뽑을 수 있는 특별한 기회!',
-      price: 20,
-      viewers: 8,
-      isLive: true,
-      tags: ['인형뽑기', '한정판'],
-    },
-  ];
+  // API에서 기계 목록 가져오기
+  useEffect(() => {
+    const fetchMachines = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const response = await fetch('/api/machines', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API 요청 실패 (${response.status}): ${errorText || response.statusText}`);
+        }
+        
+        const machines: ApiMachine[] = await response.json();
+        
+        // API 데이터를 GameCard 형식으로 변환
+        const cards: GameCard[] = machines.map((machine) => {
+          // machineId 추출 (machineId는 숫자)
+          const machineId = machine.machineId || machine.id;
+          if (!machineId) {
+            console.warn('machineId가 없는 기계 데이터:', machine);
+            return null;
+          }
+          const machineIdStr = String(machineId);
+          
+          // 상태 확인 (백엔드는 대문자 "AVAILABLE", "BUSY", "MAINTENANCE" 반환)
+          const statusUpper = machine.status?.toUpperCase() || 'AVAILABLE';
+          const statusLower = statusUpper.toLowerCase();
+          const isLive = statusLower === MachineStatus.AVAILABLE;
+          
+          return {
+            id: `game-${machineIdStr}`,
+            machineId: machineIdStr,
+            title: machine.name || `기계 ${machineIdStr}`,
+            description: machine.description || `${machine.name}에서 인형을 뽑아보세요!`,
+            price: machine.price || 10,
+            viewers: machine.viewers || Math.floor(Math.random() * 20) + 1,
+            isLive,
+            tags: machine.tags || ['인형뽑기'],
+            imageUrl: machine.thumbnailUrl || machine.imageUrl,
+          };
+        }).filter((card): card is GameCard => card !== null);
+        
+        setGameCards(cards);
+      } catch (err) {
+        console.error('기계 목록 가져오기 실패:', err);
+        let errorMessage = '기계 목록을 불러오는데 실패했습니다.';
+        
+        if (err instanceof TypeError && err.message.includes('fetch')) {
+          errorMessage = '네트워크 오류: 백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.';
+        } else if (err instanceof Error) {
+          errorMessage = err.message;
+        }
+        
+        setError(errorMessage);
+        // 에러 발생 시 빈 배열 설정
+        setGameCards([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchMachines();
+  }, []);
 
   const handleLogin = () => {
     navigate('/login');
@@ -87,19 +139,25 @@ const MobileAppSection: React.FC = () => {
       navigate('/login');
       return;
     }
-    // 기본 기계로 게임 시작
-    navigate('/game/machine-001');
+    // 첫 번째 사용 가능한 기계로 게임 시작
+    const availableMachine = gameCards.find(card => card.isLive);
+    if (availableMachine) {
+      navigate(`/game/${availableMachine.machineId}`);
+    } else if (gameCards.length > 0) {
+      navigate(`/game/${gameCards[0].machineId}`);
+    } else {
+      alert('사용 가능한 기계가 없습니다');
+    }
   };
 
-  const handleCardClick = (cardId: string) => {
+  const handleCardClick = (card: GameCard) => {
     if (!isConnected) {
       alert('먼저 로그인해주세요');
       navigate('/login');
       return;
     }
-    // 카드 클릭 시 해당 게임으로 이동 (cardId를 machineId로 변환)
-    const machineId = cardId.replace('game-', 'machine-');
-    navigate(`/game/${machineId}`);
+    // 카드 클릭 시 해당 게임으로 이동
+    navigate(`/game/${card.machineId}`);
   };
 
   return (
@@ -127,11 +185,26 @@ const MobileAppSection: React.FC = () => {
 
         {/* 콘텐츠 영역 */}
         <div className="mobile-content">
+          {isLoading && (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <p>기계 목록을 불러오는 중...</p>
+            </div>
+          )}
+          {error && (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'red' }}>
+              <p>오류: {error}</p>
+            </div>
+          )}
+          {!isLoading && !error && gameCards.length === 0 && (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+              <p>사용 가능한 기계가 없습니다</p>
+            </div>
+          )}
           {gameCards.map((card) => (
             <div
               key={card.id}
               className="game-card"
-              onClick={() => handleCardClick(card.id)}
+              onClick={() => handleCardClick(card)}
             >
               {card.isLive && (
                 <div className="live-badge">
