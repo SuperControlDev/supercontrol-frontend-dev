@@ -57,76 +57,39 @@ const LoginPage: React.FC = () => {
     setIsConnecting(true);
 
     try {
-      console.log(`[OAuth] ${provider} 로그인 시도 중...`);
+      // TODO: 실제 애플리케이션에서는 소셜 로그인 API를 호출해야 함
+      // 예: const response = await fetch(`/api/auth/${provider}`, { method: 'POST' });
       
-      // 백엔드 OAuth API 호출
-      const response = await fetch(`/api/auth/${provider}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // TODO: 백엔드가 요구하는 경우 request body 추가
-        // body: JSON.stringify({
-        //   token: '...', // OAuth token
-        //   code: '...',  // OAuth authorization code
-        // }),
-      });
+      // 개발 모드: 소셜 로그인 시뮬레이션
+      // 각 소셜 로그인에 대해 기본 사용자 정보 생성
+      const socialUserMap: { [key: string]: { userId: string; username: string } } = {
+        'google': { userId: 'user-google-001', username: 'Google User' },
+        'kakao': { userId: 'user-kakao-001', username: 'Kakao User' },
+        'apple': { userId: 'user-apple-001', username: 'Apple User' },
+      };
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `로그인 실패 (${response.status})`;
-        
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        
-        throw new Error(errorMessage);
-      }
-
-      // API 응답 파싱
-      const data = await response.json();
-      console.log(`[OAuth] ${provider} 로그인 성공:`, data);
-
-      // 백엔드 응답 형식에 따라 사용자 정보 추출
-      // 예상 응답 형식: { userId, username, token?, ... }
-      const userId = data.userId || data.id || data.user?.id || `user-${provider}-${Date.now()}`;
-      const username = data.username || data.name || data.user?.name || `${provider} User`;
-      const token = data.token || data.accessToken || data.access_token;
-
-      // 사용자 정보 저장
-      localStorage.setItem('userId', String(userId));
-      localStorage.setItem('username', username);
-      if (token) {
-        localStorage.setItem('authToken', token);
-      }
+      const userInfo = socialUserMap[provider];
+      localStorage.setItem('userId', userInfo.userId);
+      localStorage.setItem('username', userInfo.username);
 
       // Socket 연결
-      connect(String(userId));
+      connect(userInfo.userId);
 
-      // Socket 연결 성공 대기 (useEffect에서 처리)
-      // 타임아웃 설정: 5초 후에도 연결되지 않으면 경고
+      // 개발 모드: Socket 연결 성공 여부와 관계없이 로그인 허용
       timeoutRef.current = setTimeout(() => {
-        if (isConnecting) {
-          console.warn('[OAuth] Socket 연결이 지연되고 있습니다. 계속 진행합니다.');
-          setIsConnecting(false);
-          const defaultMachine = getDefaultMachine();
-          navigate(`/game/${defaultMachine}`);
-        }
-      }, 5000);
-
+        setIsConnecting((prev) => {
+          if (prev) {
+            console.warn('Socket 연결이 실패했을 수 있지만 개발 모드에서는 계속 진행');
+            const defaultMachine = getDefaultMachine();
+            navigate(`/game/${defaultMachine}`);
+            return false;
+          }
+          return prev;
+        });
+      }, 2000);
     } catch (err) {
-      console.error(`[OAuth] ${provider} 로그인 오류:`, err);
       setIsConnecting(false);
-      
-      let errorMessage = '로그인 실패. 다시 시도해주세요.';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      alert(errorMessage);
+      alert('로그인 실패. 다시 시도해주세요');
     }
   };
 

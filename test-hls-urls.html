@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Red5 HLS URL 测试工具</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .url-test { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+        .testing { background: #fff3cd; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Red5 HLS URL 测试工具</h1>
+    <p>点击下面的按钮测试不同的 HLS URL</p>
+    <button onclick="testAllUrls()">测试所有 URL</button>
+    <div id="results"></div>
+
+    <script>
+        const possiblePorts = [5080, 1935, 8080, 5081];
+        const streamName = 'test';
+        const possibleUrls = [];
+
+        possiblePorts.forEach(port => {
+            possibleUrls.push(`http://localhost:${port}/live/${streamName}/playlist.m3u8`);
+            possibleUrls.push(`http://localhost:${port}/hls/${streamName}.m3u8`);
+            possibleUrls.push(`http://localhost:${port}/live/${streamName}.m3u8`);
+            possibleUrls.push(`http://localhost:${port}/${streamName}/playlist.m3u8`);
+            possibleUrls.push(`http://localhost:${port}/hls/${streamName}/playlist.m3u8`);
+        });
+
+        async function testUrl(url) {
+            const div = document.createElement('div');
+            div.className = 'url-test testing';
+            div.innerHTML = `测试中: ${url}`;
+            document.getElementById('results').appendChild(div);
+
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                if (response.ok || response.status === 0) {
+                    div.className = 'url-test success';
+                    div.innerHTML = `✅ 成功: ${url} (状态: ${response.status || 'OK'})`;
+                    return true;
+                } else {
+                    div.className = 'url-test error';
+                    div.innerHTML = `❌ 失败: ${url} (状态: ${response.status})`;
+                    return false;
+                }
+            } catch (err) {
+                div.className = 'url-test error';
+                div.innerHTML = `❌ 错误: ${url} - ${err.message}`;
+                return false;
+            }
+        }
+
+        async function testAllUrls() {
+            document.getElementById('results').innerHTML = '';
+            for (const url of possibleUrls) {
+                await testUrl(url);
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+    </script>
+</body>
+</html>

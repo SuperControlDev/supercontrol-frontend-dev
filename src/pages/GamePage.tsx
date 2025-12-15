@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '@/contexts/SocketContext';
 import { SessionStatus } from '@/types/session';
-import WebRTCPlayer from '@/components/WebRTCPlayer';
+import GameVideo from '@/components/GameVideo';
 import './GamePage.css';
 
 const GamePage: React.FC = () => {
@@ -208,9 +208,10 @@ const GamePage: React.FC = () => {
         <div className="game-main-content">
           <div className="game-video-container">
             {machineId && (
-              <WebRTCPlayer 
-                machineId={machineId} 
-                sessionId={session?.sessionId}
+              <GameVideo 
+                machineId={machineId}
+                streamName="test"
+                red5Port={5080}
               />
             )}
           </div>
