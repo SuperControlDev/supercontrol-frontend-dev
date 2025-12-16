@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>원격 인형뽑기 - SUPERCON</title>
+    <!-- Red5 Pro SDK -->
+    <script>
+      // SDK 로드 상태 추적
+      window.red5proSDKLoaded = false;
+      window.red5proSDKError = null;
+      
+      // SDK 로드 성공 핸들러
+      window.addEventListener('red5prosdk:loaded', function() {
+        console.log('[Red5 Pro SDK] SDK 로드 이벤트 수신');
+        window.red5proSDKLoaded = true;
+      });
+    </script>
+    <!-- Red5 Pro WebRTC SDK - 使用国外 CDN (unpkg.com) -->
+    <!-- 生产环境建议锁定版本，例如: red5pro-webrtc-sdk@15.0.0 -->
+    <script 
+      src="https://unpkg.com/red5pro-webrtc-sdk@latest/red5pro-sdk.min.js"
+      onload="console.log('[Red5 Pro SDK] 스크립트 로드 완료'); window.red5proSDKLoaded = true; if (window.red5prosdk) { console.log('[Red5 Pro SDK] SDK 객체 확인:', Object.keys(window.red5prosdk)); console.log('[Red5 Pro SDK] WHEPClient:', window.red5prosdk.WHEPClient ? '사용 가능' : '없음'); console.log('[Red5 Pro SDK] WHIPClient:', window.red5prosdk.WHIPClient ? '사용 가능' : '없음'); } else { console.warn('[Red5 Pro SDK] window.red5prosdk가 아직 정의되지 않았습니다.'); }"
+      onerror="console.error('[Red5 Pro SDK] 스크립트 로드 실패'); window.red5proSDKError = 'SDK 스크립트를 로드할 수 없습니다.';"
+    ></script>
   </head>
   <body>
     <div id="root"></div>

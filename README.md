@@ -55,11 +55,35 @@ npm run build
 
 ## 환경 변수
 
-`.env` 파일을 생성하여 Socket 서버 주소를 설정합니다:
+`.env` 파일을 생성하여 필요한 환경 변수를 설정합니다:
 
-```
+```bash
+# Socket 服务器地址
 VITE_SOCKET_URL=http://localhost:8080
+
+# Google OAuth Client ID (Google 登录必需)
+VITE_GOOGLE_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
+
+# 后端 API 地址（可选）
+VITE_API_URL=http://localhost:8080
 ```
+
+### Google OAuth 设置
+
+1. 访问 [Google Cloud Console](https://console.cloud.google.com/)
+2. 创建新项目或选择现有项目
+3. 启用 **Google+ API**
+4. 转到 **凭据** > **创建凭据** > **OAuth 客户端 ID**
+5. 应用类型选择 **Web 应用**
+6. 添加授权的 JavaScript 源：
+   - 开发环境：`http://localhost:5173`
+   - 生产环境：你的域名
+7. 添加授权的重定向 URI：
+   - 开发环境：`http://localhost:5173`
+   - 生产环境：你的域名
+8. 复制 **客户端 ID** 并设置到 `VITE_GOOGLE_CLIENT_ID` 环境变量
+
+参考 `.env.example` 文件获取更多信息。
 
 ## 테스트 계정
 

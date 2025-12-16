@@ -164,6 +164,7 @@
 
 .game-image-placeholder,
 .game-video-container {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;

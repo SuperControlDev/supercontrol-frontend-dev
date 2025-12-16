@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC SDK 测试页面</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #4ade80;
+        }
+        .video-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background: #4ade80;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        button:hover {
+            background: #22c55e;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 6px;
+        }
+        .log {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #4ade80;
+            padding-left: 10px;
+        }
+        .log-error {
+            border-left-color: #ef4444;
+            color: #ef4444;
+        }
+        .log-warn {
+            border-left-color: #f59e0b;
+            color: #f59e0b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebRTC SDK 测试页面</h1>
+        
+        <div class="status" id="status">
+            状态: 未连接
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn" onclick="connectWebRTC()">连接 WebRTC</button>
+            <button id="disconnectBtn" onclick="disconnectWebRTC()" disabled>断开连接</button>
+        </div>
+        
+        <div class="video-container">
+            <video id="video" autoplay playsinline muted></video>
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Red5 Pro SDK -->
+    <script src="https://unpkg.com/red5pro-webrtc-sdk@latest/red5pro-sdk.min.js"></script>
+    
+    <script>
+        // 配置参数（与 GamePage.tsx 中的配置一致）
+        const config = {
+            protocol: 'http',
+            host: '192.168.45.48',
+            port: 5080,
+            app: 'live',
+            streamName: 'mystream',
+            rtcConfiguration: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                ],
+            },
+            licenseKey: '6G7F-FH9J-3D7M-1QP2', // 如果需要
+        };
+
+        let subscriber = null;
+        const video = document.getElementById('video');
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+
+        // 日志函数
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logItem = document.createElement('div');
+            logItem.className = `log-item log-${type}`;
+            logItem.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(logItem);
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // 更新状态
+        function updateStatus(status) {
+            statusEl.textContent = `状态: ${status}`;
+        }
+
+        // 连接 WebRTC
+        async function connectWebRTC() {
+            try {
+                log('开始连接 WebRTC...', 'info');
+                updateStatus('连接中...');
+                connectBtn.disabled = true;
+
+                // 等待 SDK 加载
+                if (!window.red5prosdk) {
+                    log('等待 Red5 Pro SDK 加载...', 'warn');
+                    await new Promise((resolve) => {
+                        const checkSDK = setInterval(() => {
+                            if (window.red5prosdk) {
+                                clearInterval(checkSDK);
+                                resolve();
+                            }
+                        }, 100);
+                        setTimeout(() => {
+                            clearInterval(checkSDK);
+                            if (!window.red5prosdk) {
+                                throw new Error('SDK 加载超时');
+                            }
+                        }, 10000);
+                    });
+                }
+
+                log('Red5 Pro SDK 已加载', 'info');
+                log(`SDK 属性: ${Object.keys(window.red5prosdk).join(', ')}`, 'info');
+
+                // 检查 WHEPClient
+                let SubscriberClass = null;
+                let useWHEP = false;
+
+                if (window.red5prosdk.WHEPClient) {
+                    SubscriberClass = window.red5prosdk.WHEPClient;
+                    useWHEP = true;
+                    log('使用 WHEPClient (15.0.0+)', 'info');
+                } else if (window.red5prosdk.RTCSubscriber) {
+                    SubscriberClass = window.red5prosdk.RTCSubscriber;
+                    log('使用 RTCSubscriber (旧版)', 'info');
+                } else if (window.red5prosdk.Red5ProSubscriber) {
+                    SubscriberClass = window.red5prosdk.Red5ProSubscriber;
+                    log('使用 Red5ProSubscriber (旧版)', 'info');
+                } else {
+                    throw new Error('未找到 WHEPClient、RTCSubscriber 或 Red5ProSubscriber');
+                }
+
+                // 确保视频元素存在且已添加到 DOM
+                if (!video) {
+                    throw new Error('视频元素不存在');
+                }
+                if (!document.contains(video)) {
+                    throw new Error('视频元素未添加到 DOM');
+                }
+
+                // 确保视频元素有 ID（某些 SDK 版本可能需要）
+                if (!video.id) {
+                    video.id = 'red5pro-subscriber-video';
+                    log('为视频元素设置 ID: ' + video.id, 'info');
+                }
+
+                log('视频元素检查:', 'info');
+                log(`- 标签名: ${video.tagName}`, 'info');
+                log(`- ID: ${video.id || '无'}`, 'info');
+                log(`- 在 DOM 中: ${document.contains(video)}`, 'info');
+                log(`- 父元素: ${video.parentElement ? video.parentElement.className : '无'}`, 'info');
+
+                // 创建 subscriber
+                log('创建 Subscriber 实例...', 'info');
+                
+                // 某些 SDK 版本可能需要视频元素作为构造函数参数
+                try {
+                    subscriber = new SubscriberClass();
+                } catch (e) {
+                    log('使用无参数构造函数失败，尝试使用视频元素作为参数...', 'warn');
+                    subscriber = new SubscriberClass(video);
+                }
+
+                // 配置
+                const subscriberConfig = {
+                    protocol: config.protocol,
+                    host: config.host,
+                    port: config.port,
+                    app: config.app,
+                    streamName: config.streamName,
+                    rtcConfiguration: config.rtcConfiguration,
+                    // 重要：确保视频元素正确传递
+                    mediaElement: video,
+                    element: video,
+                    videoElement: video,
+                };
+
+                if (config.licenseKey) {
+                    subscriberConfig.licenseKey = config.licenseKey;
+                }
+
+                // 如果 SDK 需要通过 ID 查找，也提供 ID
+                if (video.id) {
+                    subscriberConfig.mediaElementId = video.id;
+                }
+
+                log('配置参数:', 'info');
+                log(`- 协议: ${subscriberConfig.protocol}`, 'info');
+                log(`- 主机: ${subscriberConfig.host}`, 'info');
+                log(`- 端口: ${subscriberConfig.port}`, 'info');
+                log(`- 应用: ${subscriberConfig.app}`, 'info');
+                log(`- 流名称: ${subscriberConfig.streamName}`, 'info');
+                log(`- 视频元素: ${video.tagName}#${video.id}`, 'info');
+                log(`预期 WHEP 端点: ${config.protocol}://${config.host}:${config.port}/${config.app}/whep/${config.streamName}`, 'info');
+
+                // 设置事件监听
+                subscriber.on('Subscribe.Start', () => {
+                    log('✅ WebRTC 订阅开始', 'info');
+                    updateStatus('已连接');
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                });
+
+                subscriber.on('Subscribe.Fail', (event) => {
+                    log(`❌ WebRTC 订阅失败: ${JSON.stringify(event)}`, 'error');
+                    updateStatus('连接失败');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                });
+
+                subscriber.on('Subscribe.InvalidName', () => {
+                    log('❌ 无效的流名称', 'error');
+                    updateStatus('连接失败 - 无效的流名称');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                });
+
+                subscriber.on('Unsubscribe.Stop', () => {
+                    log('WebRTC 订阅已停止', 'info');
+                    updateStatus('已断开');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                });
+
+                // 初始化前再次确认视频元素
+                log('初始化前视频元素最终检查...', 'info');
+                const finalVideoCheck = document.getElementById(video.id);
+                if (!finalVideoCheck || finalVideoCheck !== video) {
+                    throw new Error('视频元素检查失败');
+                }
+                log('✅ 视频元素检查通过', 'info');
+
+                // 如果 SDK 有 setMediaElement 方法，先调用
+                if (subscriber && typeof subscriber.setMediaElement === 'function') {
+                    log('调用 subscriber.setMediaElement()...', 'info');
+                    try {
+                        subscriber.setMediaElement(video);
+                        log('✅ setMediaElement() 完成', 'info');
+                    } catch (e) {
+                        log('setMediaElement() 失败: ' + e.message, 'warn');
+                    }
+                }
+
+                // 如果 SDK 有 attach 方法，先调用
+                if (subscriber && typeof subscriber.attach === 'function') {
+                    log('调用 subscriber.attach()...', 'info');
+                    try {
+                        subscriber.attach(video);
+                        log('✅ attach() 完成', 'info');
+                    } catch (e) {
+                        log('attach() 失败: ' + e.message, 'warn');
+                    }
+                }
+
+                // 初始化
+                log('调用 subscriber.init()...', 'info');
+                log('⚠️ 注意：如果出现 hasAttribute 错误，说明视频元素未正确传递', 'warn');
+                await subscriber.init(subscriberConfig);
+                log('✅ subscriber.init() 完成', 'info');
+
+                // 订阅
+                log('调用 subscriber.subscribe()...', 'info');
+                log('⚠️ 注意：请在 Network 标签页中查找 WHEP 端点请求', 'warn');
+                await subscriber.subscribe();
+                log('✅ subscriber.subscribe() 完成', 'info');
+
+                // 获取视频流
+                setTimeout(() => {
+                    try {
+                        const view = subscriber.getView();
+                        if (view) {
+                            if (view instanceof HTMLVideoElement) {
+                                if (view !== video && view.srcObject) {
+                                    video.srcObject = view.srcObject;
+                                    log('✅ 从 view 复制视频流', 'info');
+                                } else if (view === video) {
+                                    log('✅ view 就是当前视频元素', 'info');
+                                }
+                            } else if (view && view.srcObject) {
+                                video.srcObject = view.srcObject;
+                                log('✅ 从 view.srcObject 设置视频流', 'info');
+                            }
+                        } else {
+                            log('⚠️ getView() 返回 null，等待流准备...', 'warn');
+                        }
+                    } catch (e) {
+                        log('获取视频流时出错: ' + e.message, 'warn');
+                    }
+                }, 1000);
+
+            } catch (error) {
+                log(`❌ 连接错误: ${error.message}`, 'error');
+                log(`错误堆栈: ${error.stack}`, 'error');
+                updateStatus('连接失败');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        // 断开连接
+        async function disconnectWebRTC() {
+            try {
+                if (subscriber) {
+                    log('断开 WebRTC 连接...', 'info');
+                    await subscriber.unsubscribe();
+                    subscriber = null;
+                    video.srcObject = null;
+                    log('已断开连接', 'info');
+                    updateStatus('已断开');
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                }
+            } catch (error) {
+                log(`断开连接错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成
+        window.addEventListener('load', () => {
+            log('页面加载完成', 'info');
+            log('配置信息:', 'info');
+            log(`- 主机: ${config.host}`, 'info');
+            log(`- 端口: ${config.port}`, 'info');
+            log(`- 应用: ${config.app}`, 'info');
+            log(`- 流名称: ${config.streamName}`, 'info');
+            log(`- 协议: ${config.protocol}`, 'info');
+            log('等待 SDK 加载...', 'info');
+        });
+    </script>
+</body>
+</html>
+

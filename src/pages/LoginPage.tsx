@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useGoogleLogin } from '@react-oauth/google';
 import { useSocket } from '@/contexts/SocketContext';
 import { MachineStatus } from '@/types/session';
 import './LoginPage.css';
@@ -9,42 +10,40 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { connect, isConnected } = useSocket();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasNavigatedRef = useRef(false); // 跳转 상태 추적
 
-  // 기본 사용 가능한 기계 가져오기
+  // 기본 사용 가능한 기계 가져오기 (테스트용)
   const getDefaultMachine = (): string => {
-    const mockMachines = [
-      { machineId: 'machine-001', status: MachineStatus.AVAILABLE },
-      { machineId: 'machine-002', status: MachineStatus.AVAILABLE },
-      { machineId: 'machine-003', status: MachineStatus.BUSY },
-      { machineId: 'machine-004', status: MachineStatus.AVAILABLE },
-    ];
-    
-    const availableMachine = mockMachines.find(
-      (m) => m.status === MachineStatus.AVAILABLE
-    );
-    
-    return availableMachine ? availableMachine.machineId : mockMachines[0].machineId;
+    // API에서 가져온 첫 번째 기계 ID 사용 (없으면 기본값)
+    // 실제로는 API에서 가져온 첫 번째 사용 가능한 기계를 사용해야 함
+    // 테스트용으로는 첫 번째 기계 ID (1) 사용
+    return '1'; // machineId: 1 (백엔드 API의 첫 번째 기계)
   };
 
   // 연결 상태 감시, 연결 성공 후 게임 화면으로 이동
   useEffect(() => {
-    if (isConnected && isConnecting) {
+    if (isConnected && isConnecting && !hasNavigatedRef.current) {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
       
+      hasNavigatedRef.current = true;
       setIsConnecting(false);
       const defaultMachine = getDefaultMachine();
+      console.log('[Login] Socket 연결 성공, 게임 페이지로 이동:', `/game/${defaultMachine}`);
       navigate(`/game/${defaultMachine}`);
     }
   }, [isConnected, isConnecting, navigate]);
 
-  // 타이머 정리
+  // 컴포넌트 마운트 시 상태 초기화
   useEffect(() => {
+    hasNavigatedRef.current = false;
+    setIsConnecting(false);
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
     };
   }, []);
@@ -53,43 +52,336 @@ const LoginPage: React.FC = () => {
     navigate('/');
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'kakao' | 'apple') => {
+  // 모의 로그인 함수 (테스트용)
+  const handleMockLogin = (provider: 'google' | 'kakao' | 'apple') => {
+    // 이미跳转중이면 무시
+    if (hasNavigatedRef.current) {
+      return;
+    }
+    
+    setIsConnecting(true);
+    hasNavigatedRef.current = false; // 跳转状态重置
+    
+    console.log(`[Mock Login] ${provider} 모의 로그인 시작`);
+    
+    // 모의 사용자 정보 생성
+    const socialUserMap: { [key: string]: { userId: string; username: string } } = {
+      'google': { userId: 'user-google-001', username: 'Google Test User' },
+      'kakao': { userId: 'user-kakao-001', username: 'Kakao Test User' },
+      'apple': { userId: 'user-apple-001', username: 'Apple Test User' },
+    };
+
+    const userInfo = socialUserMap[provider];
+    
+    // 사용자 정보 저장
+    localStorage.setItem('userId', userInfo.userId);
+    localStorage.setItem('username', userInfo.username);
+    localStorage.setItem('mockLogin', 'true'); // 모의 로그인 표시
+
+    // Socket 연결 시도
+    connect(userInfo.userId);
+
+    // 타임아웃 설정: 1초 후 게임 페이지로 이동 (Socket 연결을 기다리지 않음)
+    timeoutRef.current = setTimeout(() => {
+      if (!hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        setIsConnecting(false);
+        const defaultMachine = getDefaultMachine();
+        console.log('[Mock Login] 타임아웃, 게임 페이지로 이동:', `/game/${defaultMachine}`);
+        navigate(`/game/${defaultMachine}`);
+      }
+    }, 1000);
+  };
+
+  // 실제 OAuth 로그인 함수 (백엔드 API 호출)
+  const handleRealOAuthLogin = async (provider: 'google' | 'kakao' | 'apple') => {
     setIsConnecting(true);
 
     try {
-      // TODO: 실제 애플리케이션에서는 소셜 로그인 API를 호출해야 함
-      // 예: const response = await fetch(`/api/auth/${provider}`, { method: 'POST' });
+      console.log(`[OAuth] ${provider} 로그인 시도 중...`);
       
-      // 개발 모드: 소셜 로그인 시뮬레이션
-      // 각 소셜 로그인에 대해 기본 사용자 정보 생성
-      const socialUserMap: { [key: string]: { userId: string; username: string } } = {
-        'google': { userId: 'user-google-001', username: 'Google User' },
-        'kakao': { userId: 'user-kakao-001', username: 'Kakao User' },
-        'apple': { userId: 'user-apple-001', username: 'Apple User' },
-      };
+      // 백엔드 OAuth API 호출
+      const response = await fetch(`/api/auth/${provider}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // TODO: 백엔드가 요구하는 경우 request body 추가
+        // body: JSON.stringify({
+        //   token: '...', // OAuth token
+        //   code: '...',  // OAuth authorization code
+        // }),
+      });
 
-      const userInfo = socialUserMap[provider];
-      localStorage.setItem('userId', userInfo.userId);
-      localStorage.setItem('username', userInfo.username);
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `로그인 실패 (${response.status})`;
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // API 응답 파싱
+      const data = await response.json();
+      console.log(`[OAuth] ${provider} 로그인 성공:`, data);
+
+      // 백엔드 응답 형식에 따라 사용자 정보 추출
+      // 예상 응답 형식: { userId, username, token?, ... }
+      const userId = data.userId || data.id || data.user?.id || `user-${provider}-${Date.now()}`;
+      const username = data.username || data.name || data.user?.name || `${provider} User`;
+      const token = data.token || data.accessToken || data.access_token;
+
+      // 사용자 정보 저장
+      localStorage.setItem('userId', String(userId));
+      localStorage.setItem('username', username);
+      if (token) {
+        localStorage.setItem('authToken', token);
+      }
+      localStorage.removeItem('mockLogin'); // 실제 로그인 시 모의 로그인 플래그 제거
 
       // Socket 연결
-      connect(userInfo.userId);
+      connect(String(userId));
 
-      // 개발 모드: Socket 연결 성공 여부와 관계없이 로그인 허용
+      // Socket 연결 성공 대기 (useEffect에서 처리)
+      // 타임아웃 설정: 5초 후에도 연결되지 않으면 경고
       timeoutRef.current = setTimeout(() => {
-        setIsConnecting((prev) => {
-          if (prev) {
-            console.warn('Socket 연결이 실패했을 수 있지만 개발 모드에서는 계속 진행');
-            const defaultMachine = getDefaultMachine();
-            navigate(`/game/${defaultMachine}`);
-            return false;
-          }
-          return prev;
-        });
-      }, 2000);
+        if (isConnecting) {
+          console.warn('[OAuth] Socket 연결이 지연되고 있습니다. 계속 진행합니다.');
+          setIsConnecting(false);
+          const defaultMachine = getDefaultMachine();
+          navigate(`/game/${defaultMachine}`);
+        }
+      }, 5000);
+
     } catch (err) {
+      console.error(`[OAuth] ${provider} 로그인 오류:`, err);
       setIsConnecting(false);
-      alert('로그인 실패. 다시 시도해주세요');
+      
+      let errorMessage = '로그인 실패. 다시 시도해주세요.';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  // Google OAuth 登录处理
+  const handleGoogleLoginSuccess = async (tokenResponse: any) => {
+    setIsConnecting(true);
+    hasNavigatedRef.current = false;
+
+    try {
+      console.log('[Google OAuth] 登录成功，获取用户信息...');
+      
+      // 使用 access_token 获取用户信息
+      const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: {
+          Authorization: `Bearer ${tokenResponse.access_token}`,
+        },
+      });
+
+      if (!userInfoResponse.ok) {
+        throw new Error('获取用户信息失败');
+      }
+
+      const userInfo = await userInfoResponse.json();
+      console.log('[Google OAuth] Google 用户信息:', userInfo);
+
+      // 构建 providerUserId (格式: google_{google_user_id})
+      const providerUserId = `google_${userInfo.id}`;
+      console.log('[Google OAuth] Provider User ID:', providerUserId);
+
+      // 调用后端 OAuth 登录 API
+      // POST /api/auth/google
+      // Request Body: { "providerUserId": "google_12345" }
+      const backendApiUrl = import.meta.env.VITE_API_URL || '';
+      const apiUrl = backendApiUrl ? `${backendApiUrl}/api/auth/google` : '/api/auth/google';
+      
+      console.log('[Google OAuth] 调用后端 API:', apiUrl);
+      
+      const backendResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          providerUserId: providerUserId,
+        }),
+      });
+
+      if (!backendResponse.ok) {
+        const errorText = await backendResponse.text();
+        let errorMessage = `后端登录失败 (${backendResponse.status})`;
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // 解析后端返回的用户信息
+      const backendData = await backendResponse.json();
+      console.log('[Google OAuth] 后端返回的用户信息:', backendData);
+
+      // 使用后端返回的用户信息
+      const userId = backendData.userId || backendData.id;
+      const username = backendData.username || userInfo.name || userInfo.email || 'Google User';
+      const email = userInfo.email || '';
+      const picture = userInfo.picture || '';
+      const balance = backendData.balance || 0;
+      const provider = backendData.provider || 'google';
+
+      // 保存用户信息到 localStorage
+      localStorage.setItem('userId', String(userId));
+      localStorage.setItem('username', username);
+      localStorage.setItem('userEmail', email);
+      localStorage.setItem('balance', String(balance));
+      localStorage.setItem('provider', provider);
+      if (picture) {
+        localStorage.setItem('userAvatar', picture);
+      }
+      localStorage.setItem('authToken', tokenResponse.access_token);
+      localStorage.removeItem('mockLogin'); // 移除模拟登录标记
+
+      // Socket 连接
+      connect(String(userId));
+
+      // 设置超时：1秒后跳转到游戏页面
+      timeoutRef.current = setTimeout(() => {
+        if (!hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          setIsConnecting(false);
+          const defaultMachine = getDefaultMachine();
+          console.log('[Google OAuth] 跳转到游戏页面:', `/game/${defaultMachine}`);
+          navigate(`/game/${defaultMachine}`);
+        }
+      }, 1000);
+
+    } catch (err) {
+      console.error('[Google OAuth] 登录处理错误:', err);
+      setIsConnecting(false);
+      alert('Google 登录失败，请重试');
+    }
+  };
+
+  const handleGoogleLoginError = () => {
+    console.error('[Google OAuth] 登录失败或取消');
+    setIsConnecting(false);
+    alert('Google 登录已取消');
+  };
+
+  // Google OAuth Client ID 检查
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const hasGoogleClientId = !!googleClientId && googleClientId !== 'dummy-client-id' && googleClientId.trim() !== '';
+
+  // 手动实现 Google OAuth 登录（根据环境自动选择 redirect_uri）
+  const handleManualGoogleLogin = () => {
+    if (!hasGoogleClientId) {
+      console.warn('[Login] Google Client ID 未配置，使用模拟登录');
+      handleMockLogin('google');
+      return;
+    }
+
+    // 获取 redirect_uri
+    const getRedirectUri = () => {
+      // 如果设置了环境变量，优先使用环境变量
+      if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
+        return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
+      }
+      
+      // 默认使用本地开发环境的重定向 URL（前端处理 OAuth 回调，然后调用后端 POST API）
+      return 'http://localhost:3000/oauth/callback/google';
+    };
+
+    const redirectUri = getRedirectUri();
+    const scope = 'openid email profile';
+    const responseType = 'token'; // implicit flow
+    
+    // 详细的配置信息输出
+    console.log('%c========== Google OAuth 配置信息 ==========', 'color: blue; font-weight: bold; font-size: 14px;');
+    console.log('%c当前访问的 Origin:', 'color: green; font-weight: bold;', window.location.origin);
+    console.log('%c当前访问的 Hostname:', 'color: green; font-weight: bold;', window.location.hostname);
+    console.log('%c使用的 Redirect URI:', 'color: red; font-weight: bold; font-size: 16px;', redirectUri);
+    console.log('%c============================================', 'color: blue; font-weight: bold; font-size: 14px;');
+    
+    // 重要提示：显示需要在 Google Cloud Console 中配置的 URI
+    console.warn('%c⚠️  重要：请在 Google Cloud Console 中配置以下 Redirect URI:', 'color: orange; font-weight: bold; font-size: 14px;');
+    console.warn('%c' + redirectUri, 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
+    console.log('%c配置路径：Google Cloud Console > API 和服务 > 凭据 > OAuth 2.0 客户端 ID > 已授权的重定向 URI', 'color: gray; font-style: italic;');
+    
+    // 构建 Google OAuth URL
+    const encodedRedirectUri = encodeURIComponent(redirectUri);
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(googleClientId)}&` +
+      `redirect_uri=${encodedRedirectUri}&` +
+      `response_type=${responseType}&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `include_granted_scopes=true`;
+    
+    console.log('[Login] ========== OAuth URL 详细信息 ==========');
+    console.log('[Login] 原始 Redirect URI:', redirectUri);
+    console.log('[Login] 编码后的 Redirect URI:', encodedRedirectUri);
+    console.log('[Login] 当前访问的 Origin:', window.location.origin);
+    console.log('[Login] Redirect URI 是否匹配当前 Origin:', redirectUri.startsWith(window.location.origin));
+    console.log('[Login] 完整的 OAuth URL:', authUrl);
+    console.log('[Login] ==========================================');
+    
+    // 检查 CORS 问题
+    const redirectUriMatchesOrigin = redirectUri.startsWith(window.location.origin);
+    console.log('[Login] Redirect URI 是否匹配当前 Origin:', redirectUriMatchesOrigin);
+    
+    if (!redirectUriMatchesOrigin) {
+      console.error('%c❌ CORS 错误：Redirect URI 与当前访问的域名不匹配！', 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
+      console.error('%c当前 Origin: ' + window.location.origin, 'color: red; font-weight: bold;');
+      console.error('%cRedirect URI: ' + redirectUri, 'color: red; font-weight: bold;');
+      console.error('%c这会导致 "Invalid CORS request" 错误！', 'color: red; font-weight: bold;');
+      console.error('%c解决方案：确保 redirect_uri 以当前 origin 开头', 'color: orange; font-weight: bold;');
+    } else {
+      console.log('%c✅ Redirect URI 匹配当前 Origin，CORS 应该正常', 'color: green; font-weight: bold;');
+    }
+    
+    console.log('[Login] 打开 Google OAuth 登录页面');
+    
+    // 打开 OAuth 登录窗口
+    window.location.href = authUrl;
+  };
+
+  // Google OAuth 登录配置（使用库的默认实现作为备选）
+  const googleLogin = useGoogleLogin({
+    onSuccess: handleGoogleLoginSuccess,
+    onError: handleGoogleLoginError,
+    flow: 'implicit', // 使用 implicit flow (纯前端，直接获取 access_token)
+  });
+
+  // 社交登录处理函数
+  const handleSocialLogin = (provider: 'google' | 'kakao' | 'apple') => {
+    if (provider === 'google') {
+      // Google 使用真实的 OAuth 登录（如果配置了 clientId）
+      if (hasGoogleClientId) {
+        console.log('[Login] Google OAuth 登录开始，使用 redirect_uri: https://app.supercontrol.com/oauth/callback/google');
+        // 使用手动实现的 OAuth 登录以支持自定义 redirect_uri
+        handleManualGoogleLogin();
+      } else {
+        // 如果没有配置 clientId，使用模拟登录
+        console.warn('[Login] Google Client ID 未配置，使用模拟登录');
+        handleMockLogin('google');
+      }
+    } else {
+      // Kakao 和 Apple 暂时使用模拟登录
+      handleMockLogin(provider);
+      // 实际 API 使用时可取消注释
+      // handleRealOAuthLogin(provider);
     }
   };
 
@@ -125,9 +417,15 @@ const LoginPage: React.FC = () => {
             className="social-button social-button-google"
             onClick={() => handleSocialLogin('google')}
             disabled={isConnecting}
+            title={hasGoogleClientId ? '使用 Google OAuth 登录' : 'Google Client ID 未配置，将使用模拟登录'}
           >
             <span className="google-icon">G</span>
             <span>Continue with Google</span>
+            {!hasGoogleClientId && (
+              <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '8px' }}>
+                (模拟)
+              </span>
+            )}
           </button>
 
           <button
@@ -151,6 +449,7 @@ const LoginPage: React.FC = () => {
             </svg>
             <span>Continue with Apple</span>
           </button>
+          
         </div>
 
           {isConnecting && (

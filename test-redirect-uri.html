@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试 Redirect URI 配置</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .uri {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+            border-left: 4px solid #ffc107;
+        }
+        .error {
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #f44336;
+        }
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover {
+            background: #357ae8;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #4285f4;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔍 Google OAuth Redirect URI 配置检查工具</h1>
+        
+        <div class="info">
+            <strong>当前访问的 URL:</strong><br>
+            <span id="currentUrl"></span>
+        </div>
+
+        <div class="uri">
+            <strong>应该使用的 Redirect URI:</strong><br>
+            <span id="redirectUri"></span>
+        </div>
+
+        <div class="step">
+            <h3>步骤 1: 复制上面的 Redirect URI</h3>
+            <button onclick="copyRedirectUri()">📋 复制 Redirect URI</button>
+        </div>
+
+        <div class="step">
+            <h3>步骤 2: 在 Google Cloud Console 中配置</h3>
+            <ol>
+                <li>访问 <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console - 凭据页面</a></li>
+                <li>找到你的 OAuth 2.0 客户端 ID</li>
+                <li>点击进入编辑页面</li>
+                <li>在 <strong>已授权的重定向 URI</strong> 部分，点击 <strong>+ 添加 URI</strong></li>
+                <li>粘贴上面显示的 Redirect URI</li>
+                <li>点击 <strong>保存</strong></li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>步骤 3: 同时配置已授权的 JavaScript 源</h3>
+            <ol>
+                <li>在同一个编辑页面中，找到 <strong>已授权的 JavaScript 源</strong> 部分</li>
+                <li>点击 <strong>+ 添加 URI</strong></li>
+                <li>添加: <span id="jsOrigin"></span></li>
+                <li>点击 <strong>保存</strong></li>
+            </ol>
+        </div>
+
+        <div class="error" id="errorInfo" style="display: none;">
+            <strong>⚠️ 常见错误：</strong>
+            <ul>
+                <li>URI 必须完全匹配（包括协议、域名、端口、路径）</li>
+                <li>开发环境使用 <code>http://</code>，不是 <code>https://</code></li>
+                <li>必须包含端口号 <code>:3000</code></li>
+                <li>路径是 <code>/oauth/callback/google</code>（没有结尾斜杠）</li>
+            </ul>
+        </div>
+
+        <div class="step">
+            <h3>步骤 4: 测试配置</h3>
+            <p>配置完成后，等待 1-2 分钟让配置生效，然后：</p>
+            <ol>
+                <li>清除浏览器缓存或使用无痕模式</li>
+                <li>访问 <a href="http://localhost:3000/login" target="_blank">http://localhost:3000/login</a></li>
+                <li>点击 "Continue with Google" 按钮</li>
+                <li>应该能够正常登录了</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // 获取当前 URL 信息
+        const currentOrigin = window.location.origin;
+        const currentHostname = window.location.hostname;
+        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+        
+        // 判断是否为开发环境
+        const isDevelopment = 
+            currentHostname === 'localhost' || 
+            currentHostname === '127.0.0.1' ||
+            currentHostname.startsWith('192.168.') ||
+            currentHostname.startsWith('10.') ||
+            currentHostname.startsWith('172.');
+        
+        // 确定 redirect_uri
+        let redirectUri;
+        if (isDevelopment) {
+            redirectUri = `${currentOrigin}/oauth/callback/google`;
+        } else {
+            redirectUri = 'https://app.supercontrol.com/oauth/callback/google';
+        }
+        
+        // 显示信息
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('redirectUri').textContent = redirectUri;
+        document.getElementById('jsOrigin').textContent = currentOrigin;
+        
+        // 复制功能
+        function copyRedirectUri() {
+            navigator.clipboard.writeText(redirectUri).then(() => {
+                alert('✅ Redirect URI 已复制到剪贴板！\n\n' + redirectUri);
+            }).catch(err => {
+                // 备用方法
+                const textArea = document.createElement('textarea');
+                textArea.value = redirectUri;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('✅ Redirect URI 已复制到剪贴板！\n\n' + redirectUri);
+            });
+        }
+        
+        // 检查常见错误
+        if (redirectUri.includes('localhost') && !redirectUri.includes('http://')) {
+            document.getElementById('errorInfo').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+
