@@ -41,6 +41,40 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
   const [debugInfo, setDebugInfo] = useState<string>('WebRTC 연결 초기화 중...');
   const [useIframe, setUseIframe] = useState(false); // iframe 모드 사용 여부
   const { socket, isConnected } = useSocket();
+  
+  // 确保视频持续播放（像测试页面一样）
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !video.srcObject) return;
+    
+    // 如果视频已连接且有流，确保持续播放
+    if (connectionState === 'connected' && video.srcObject) {
+      // 如果视频暂停了，自动恢复播放
+      if (video.paused) {
+        video.play().catch((err) => {
+          console.warn('[WebRTC] 自动播放失败:', err);
+        });
+        console.log('[WebRTC] 视频暂停，自动恢复播放');
+      }
+    }
+  }, [connectionState]);
+  
+  // 定期检查视频播放状态，确保持续播放
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    
+    const checkInterval = setInterval(() => {
+      const video = videoRef.current;
+      if (video && video.srcObject && video.paused) {
+        console.log('[WebRTC] 检测到视频暂停，自动恢复播放');
+        video.play().catch((err) => {
+          console.warn('[WebRTC] 恢复播放失败:', err);
+        });
+      }
+    }, 1000); // 每秒检查一次
+    
+    return () => clearInterval(checkInterval);
+  }, [connectionState]);
 
   // WebRTC 配置
   const rtcConfiguration: RTCConfiguration = {
@@ -538,10 +572,17 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
             setDebugInfo('비디오 스트림 재생 중');
           }).catch((err) => {
             console.error('[Red5 Pro SDK] 자동 재생 실패:', err);
-            // 不显示错误，保持连接中状态
-            setError(null);
-            setConnectionState('connecting');
-            setDebugInfo('비디오 재생 준비 중...');
+            // 即使自动播放失败，如果视频流已连接，也设置为 connected
+            // 用户可以手动点击播放
+            if (currentVideo.srcObject) {
+              setConnectionState('connected');
+              setError(null);
+              setDebugInfo('비디오 스트림 준비 완료 (클릭하여 재생)');
+            } else {
+              setError(null);
+              setConnectionState('connecting');
+              setDebugInfo('비디오 재생 준비 중...');
+            }
           });
         } else {
           console.warn('[Red5 Pro SDK] 비디오 요소에 srcObject가 설정되지 않았습니다.');
@@ -560,8 +601,8 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
       subscriber.on('Subscribe.Start', () => {
         console.log(`[Red5 Pro SDK] WebRTC 구독 시작 (${useWHEP ? 'WHEP' : 'RTC'})`);
         setDebugInfo(`WebRTC 스트림 수신 중... (${useWHEP ? 'WHEP' : 'RTC'})`);
-        setConnectionState('connected');
         setError(null);
+        // 先保持 connecting 状态，等视频流连接后再设置为 connected
         
         // 延迟连接视频流，确保流已准备好
         setTimeout(() => {
@@ -630,7 +671,9 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
 
       subscriber.on('Unsubscribe.Stop', () => {
         console.log('[Red5 Pro SDK] WebRTC 구독 중지');
-        setConnectionState('disconnected');
+        // 订阅停止时，如果组件仍然挂载，保持连接状态以便重新连接
+        // 只有在组件卸载时才设置为 disconnected
+        // setConnectionState('disconnected');
       });
 
       // 연결 타임아웃 설정
@@ -661,11 +704,11 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         }
         
         // 确保视频元素有 ID（某些 SDK 版本可能需要）
-        if (!currentVideo.id) {
-          currentVideo.id = 'red5pro-subscriber-video';
-          console.log('[Red5 Pro SDK] 비디오 요소에 ID 설정:', currentVideo.id);
-        }
-        
+          if (!currentVideo.id) {
+            currentVideo.id = 'red5pro-subscriber-video';
+            console.log('[Red5 Pro SDK] 비디오 요소에 ID 설정:', currentVideo.id);
+          }
+          
         console.log('[Red5 Pro SDK] 视频元素检查:', 'info');
         console.log(`[Red5 Pro SDK] - 标签名: ${currentVideo.tagName}`, 'info');
         console.log(`[Red5 Pro SDK] - ID: ${currentVideo.id || '无'}`, 'info');
@@ -673,13 +716,13 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         console.log(`[Red5 Pro SDK] - 父元素: ${currentVideo.parentElement ? currentVideo.parentElement.className : '无'}`, 'info');
         
         // 更新 config 中的视频元素引用（完全按照测试页面）
-        config.mediaElement = currentVideo;
-        config.element = currentVideo;
-        config.videoElement = currentVideo;
-        if (currentVideo.id) {
-          config.mediaElementId = currentVideo.id;
-        }
-        
+          config.mediaElement = currentVideo;
+          config.element = currentVideo;
+          config.videoElement = currentVideo;
+          if (currentVideo.id) {
+            config.mediaElementId = currentVideo.id;
+          }
+          
         console.log('[Red5 Pro SDK] 配置参数:', 'info');
         console.log(`[Red5 Pro SDK] - 协议: ${config.protocol}`, 'info');
         console.log(`[Red5 Pro SDK] - 主机: ${config.host}`, 'info');
@@ -698,21 +741,21 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         console.log('[Red5 Pro SDK] ✅ 视频元素检查通过', 'info');
         
         // 如果 SDK 有 setMediaElement 方法，先调用（完全按照测试页面）
-        if (subscriber && typeof subscriber.setMediaElement === 'function') {
+          if (subscriber && typeof subscriber.setMediaElement === 'function') {
           console.log('[Red5 Pro SDK] 调用 subscriber.setMediaElement()...', 'info');
-          try {
-            subscriber.setMediaElement(currentVideo);
+            try {
+              subscriber.setMediaElement(currentVideo);
             console.log('[Red5 Pro SDK] ✅ setMediaElement() 完成', 'info');
           } catch (e: any) {
             console.log('[Red5 Pro SDK] setMediaElement() 失败: ' + e.message, 'warn');
+            }
           }
-        }
-        
+          
         // 如果 SDK 有 attach 方法，先调用（完全按照测试页面）
-        if (subscriber && typeof subscriber.attach === 'function') {
+          if (subscriber && typeof subscriber.attach === 'function') {
           console.log('[Red5 Pro SDK] 调用 subscriber.attach()...', 'info');
-          try {
-            subscriber.attach(currentVideo);
+            try {
+              subscriber.attach(currentVideo);
             console.log('[Red5 Pro SDK] ✅ attach() 完成', 'info');
           } catch (e: any) {
             console.log('[Red5 Pro SDK] attach() 失败: ' + e.message, 'warn');
@@ -728,7 +771,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         // 订阅（完全按照测试页面）
         console.log('[Red5 Pro SDK] 调用 subscriber.subscribe()...', 'info');
         console.log('[Red5 Pro SDK] ⚠️ 注意：请在 Network 标签页中查找 WHEP 端点请求', 'warn');
-        await subscriber.subscribe();
+      await subscriber.subscribe();
         console.log('[Red5 Pro SDK] ✅ subscriber.subscribe() 完成', 'info');
         
         // 获取视频流（完全按照测试页面，延迟 1 秒）
@@ -740,12 +783,33 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
                 if (view !== currentVideo && view.srcObject) {
                   currentVideo.srcObject = view.srcObject;
                   console.log('[Red5 Pro SDK] ✅ 从 view 复制视频流', 'info');
+                  // 设置视频流后尝试播放并更新状态
+                  currentVideo.play().then(() => {
+                    setConnectionState('connected');
+                  }).catch((err) => {
+                    console.warn('[Red5 Pro SDK] 自动播放失败:', err);
+                    // 即使播放失败，如果流已设置，也设置为 connected
+                    if (currentVideo.srcObject) {
+                      setConnectionState('connected');
+                    }
+                  });
                 } else if (view === currentVideo) {
                   console.log('[Red5 Pro SDK] ✅ view 就是当前视频元素', 'info');
+                  setConnectionState('connected');
                 }
               } else if (view && view.srcObject) {
                 currentVideo.srcObject = view.srcObject;
                 console.log('[Red5 Pro SDK] ✅ 从 view.srcObject 设置视频流', 'info');
+                // 设置视频流后尝试播放并更新状态
+                currentVideo.play().then(() => {
+                  setConnectionState('connected');
+                }).catch((err) => {
+                  console.warn('[Red5 Pro SDK] 自动播放失败:', err);
+                  // 即使播放失败，如果流已设置，也设置为 connected
+                  if (currentVideo.srcObject) {
+                    setConnectionState('connected');
+                  }
+                });
               }
             } else {
               console.log('[Red5 Pro SDK] ⚠️ getView() 返回 null，等待流准备...', 'warn');
@@ -1221,7 +1285,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
             setError(null);
             setConnectionState('connecting');
             setDebugInfo('비디오 요소 준비 중...');
-          }
+            }
         }
       };
       
@@ -1271,22 +1335,22 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
       waitForVideoElement(() => {
         // 额外的延迟，确保 React 完全渲染完成（参考测试页面的成功经验）
         setTimeout(() => {
-          // Red5 Pro SDK 사용 여부에 따라 선택
-          if (useRed5ProSDK) {
-            // SDK 로드를 기다린 후 초기화
-            waitForSDK(5000)
-              .then(() => {
-                console.log('[Red5 Pro SDK] WebRTC 초기화 시작');
+      // Red5 Pro SDK 사용 여부에 따라 선택
+        if (useRed5ProSDK) {
+          // SDK 로드를 기다린 후 초기화
+          waitForSDK(5000)
+            .then(() => {
+        console.log('[Red5 Pro SDK] WebRTC 초기화 시작');
                 // 비디오 요소 다시 확인（参考测试页面）
                 const currentVideo = videoRef.current;
                 if (!currentVideo) {
-                  console.error('[Red5 Pro SDK] 비디오 요소가 없습니다.');
+                console.error('[Red5 Pro SDK] 비디오 요소가 없습니다.');
                   // 不显示错误，保持连接中状态
                   setError(null);
                   setConnectionState('connecting');
                   setDebugInfo('비디오 요소 준비 중...');
-                  return;
-                }
+                return;
+              }
                 
                 // 确保视频元素在 DOM 中（参考测试页面）
                 if (!document.contains(currentVideo)) {
@@ -1317,26 +1381,26 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
                 
                 // 延迟一小段时间，确保 UI 更新为加载状态
                 setTimeout(() => {
-                  initializeWebRTCWithRed5Pro();
+        initializeWebRTCWithRed5Pro();
                 }, 100);
-              })
-              .catch((err) => {
-                console.warn('[WebRTC] Red5 Pro SDK 로드 실패, 네이티브 WebRTC로 fallback:', err);
+            })
+            .catch((err) => {
+              console.warn('[WebRTC] Red5 Pro SDK 로드 실패, 네이티브 WebRTC로 fallback:', err);
                 // 保持连接中状态，不显示错误
                 setConnectionState('connecting');
                 setError(null);
                 setDebugInfo('네이티브 WebRTC 연결 시도 중...');
-                initializeWebRTC();
-              });
-          } else {
-            // Fallback to native WebRTC
-            console.log('[WebRTC] Red5 Pro SDK 비활성화, 네이티브 WebRTC 사용');
+              initializeWebRTC();
+            });
+      } else {
+        // Fallback to native WebRTC
+          console.log('[WebRTC] Red5 Pro SDK 비활성화, 네이티브 WebRTC 사용');
             // 保持连接中状态
             setConnectionState('connecting');
             setError(null);
             setDebugInfo('네이티브 WebRTC 연결 시도 중...');
-            initializeWebRTC();
-          }
+      initializeWebRTC();
+      }
         }, 200); // 200ms 延迟，确保 React 渲染完成
       });
     } else {
@@ -1553,7 +1617,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
             {/* 未连接时始终显示加载状态，不显示错误 */}
             {connectionState !== 'connected' && (
               <>
-                <p className="status-text">{getStatusText()}</p>
+            <p className="status-text">{getStatusText()}</p>
                 <div className="loading-spinner" style={{ margin: '20px auto' }}></div>
               </>
             )}

@@ -14,6 +14,7 @@ interface GameCard {
   tags: string[];
   imageUrl?: string;
   machineId: string | number; // API에서 받은 실제 machineId
+  theme?: string; // 主题颜色或主题名称
 }
 
 // API에서 받은 기계 데이터 타입
@@ -28,13 +29,14 @@ interface ApiMachine {
   description?: string;
   viewers?: number;
   tags?: string[];
+  theme?: string; // 主题信息
   createdAt?: string | null;
   updatedAt?: string | null;
 }
 
 const MobileAppSection: React.FC = () => {
   const navigate = useNavigate();
-  const { isConnected } = useSocket();
+  const { isConnected, connect } = useSocket();
   const [currentTime, setCurrentTime] = useState<string>('');
   const [gameCards, setGameCards] = useState<GameCard[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -104,6 +106,7 @@ const MobileAppSection: React.FC = () => {
             isLive,
             tags: machine.tags || ['인형뽑기'],
             imageUrl: machine.thumbnailUrl || machine.imageUrl,
+            theme: machine.theme || `theme-${machineIdStr}`, // 使用后端提供的主题，或生成默认主题
           };
         }).filter((card): card is GameCard => card !== null);
         
@@ -134,30 +137,121 @@ const MobileAppSection: React.FC = () => {
   };
 
   const handlePlayGame = () => {
+    // 检查是否有登录状态（localStorage）
+    const savedUserId = localStorage.getItem('userId');
+    const authToken = localStorage.getItem('authToken');
+    const mockLogin = localStorage.getItem('mockLogin') === 'true';
+    
+    // 如果已登录，直接进入游戏页面（Socket 连接会在 GamePage 中自动恢复）
+    if (savedUserId && (authToken || mockLogin)) {
+      console.log('[MobileAppSection] 检测到登录状态，直接进入游戏页面');
+      // 如果 Socket 未连接，先尝试连接（可选，GamePage 也会处理）
+      if (!isConnected) {
+        connect(savedUserId);
+      }
+      // 第一个可用的机器开始游戏
+      const availableMachine = gameCards.find(card => card.isLive);
+      const targetCard = availableMachine || gameCards[0];
+      if (targetCard) {
+        // 保存游戏主题和标题
+        if (targetCard.theme) {
+          localStorage.setItem(`game_theme_${targetCard.machineId}`, targetCard.theme);
+        }
+        if (targetCard.title) {
+          localStorage.setItem(`game_title_${targetCard.machineId}`, targetCard.title);
+        }
+        navigate(`/game/${targetCard.machineId}`);
+      } else {
+        alert('사용 가능한 기계가 없습니다');
+      }
+      return;
+    }
+    
+    // 如果未登录，跳转到登录页面，并传递目标游戏信息
     if (!isConnected) {
       alert('먼저 로그인해주세요');
-      navigate('/login');
+      const availableMachine = gameCards.find(card => card.isLive);
+      const targetCard = availableMachine || gameCards[0];
+      const targetMachineId = targetCard?.machineId || '1';
+      // 保存游戏主题和标题
+      if (targetCard?.theme) {
+        localStorage.setItem(`game_theme_${targetMachineId}`, targetCard.theme);
+      }
+      if (targetCard?.title) {
+        localStorage.setItem(`game_title_${targetMachineId}`, targetCard.title);
+      }
+      navigate(`/login?redirect=game&machineId=${targetMachineId}`);
       return;
     }
     // 첫 번째 사용 가능한 기계로 게임 시작
     const availableMachine = gameCards.find(card => card.isLive);
-    if (availableMachine) {
-      navigate(`/game/${availableMachine.machineId}`);
-    } else if (gameCards.length > 0) {
-      navigate(`/game/${gameCards[0].machineId}`);
+    const targetCard = availableMachine || gameCards[0];
+    if (targetCard) {
+      // 保存游戏主题和标题
+      if (targetCard.theme) {
+        localStorage.setItem(`game_theme_${targetCard.machineId}`, targetCard.theme);
+      }
+      if (targetCard.title) {
+        localStorage.setItem(`game_title_${targetCard.machineId}`, targetCard.title);
+      }
+      navigate(`/game/${targetCard.machineId}`);
     } else {
       alert('사용 가능한 기계가 없습니다');
     }
   };
 
   const handleCardClick = (card: GameCard) => {
+    // 检查是否有登录状态（localStorage）
+    const savedUserId = localStorage.getItem('userId');
+    const authToken = localStorage.getItem('authToken');
+    const mockLogin = localStorage.getItem('mockLogin') === 'true';
+    
+    // 保存游戏主题和标题到 localStorage
+    if (card.theme) {
+      localStorage.setItem(`game_theme_${card.machineId}`, card.theme);
+      console.log('[MobileAppSection] 保存游戏主题:', card.theme, '机器:', card.machineId);
+    }
+    if (card.title) {
+      localStorage.setItem(`game_title_${card.machineId}`, card.title);
+      console.log('[MobileAppSection] 保存游戏标题:', card.title, '机器:', card.machineId);
+    }
+    
+    // 如果已登录，直接进入游戏页面（Socket 连接会在 GamePage 中自动恢复）
+    if (savedUserId && (authToken || mockLogin)) {
+      console.log('[MobileAppSection] 检测到登录状态，直接进入游戏页面');
+      // 如果 Socket 未连接，先尝试连接（可选，GamePage 也会处理）
+      if (!isConnected) {
+        connect(savedUserId);
+      }
+      // 카드 클릭 시 해당 게임으로 이동
+      navigate(`/game/${card.machineId}`);
+      return;
+    }
+    
+    // 如果未登录，跳转到登录页面，并传递目标游戏 machineId
     if (!isConnected) {
       alert('먼저 로그인해주세요');
-      navigate('/login');
+      navigate(`/login?redirect=game&machineId=${card.machineId}`);
       return;
     }
     // 카드 클릭 시 해당 게임으로 이동
     navigate(`/game/${card.machineId}`);
+  };
+
+  const handleMyPageClick = () => {
+    // 检查是否有登录状态
+    const savedUserId = localStorage.getItem('userId');
+    const authToken = localStorage.getItem('authToken');
+    const mockLogin = localStorage.getItem('mockLogin') === 'true';
+    
+    // 如果已登录，跳转到 MyPage
+    if (savedUserId && (authToken || mockLogin)) {
+      navigate('/mypage');
+    } else {
+      // 如果未登录，跳转到登录页面，并标记来源为 mypage
+      alert('먼저 로그인해주세요');
+      navigate('/login?redirect=mypage');
+    }
   };
 
   return (
@@ -175,7 +269,7 @@ const MobileAppSection: React.FC = () => {
         {/* 헤더 */}
         <div className="mobile-header">
           <h1 className="app-logo">SuperControl</h1>
-          <button className="user-profile-button" onClick={handleLogin}>
+          <button className="user-profile-button" onClick={handleMyPageClick}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="8" r="4"/>
               <path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/>
@@ -270,7 +364,7 @@ const MobileAppSection: React.FC = () => {
             </svg>
             <span>Ranking</span>
           </div>
-          <div className="nav-item">
+          <div className="nav-item" onClick={handleMyPageClick}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
             </svg>

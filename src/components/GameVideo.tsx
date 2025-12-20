@@ -294,9 +294,9 @@ const GameVideo: React.FC<GameVideoProps> = ({
     if (!video) return;
 
     // 尝试播放
-    video.play().catch((err) => {
-      console.error('[HLS Player] 수동 재생 실패:', err);
-    });
+      video.play().catch((err) => {
+        console.error('[HLS Player] 수동 재생 실패:', err);
+      });
   };
 
   return (

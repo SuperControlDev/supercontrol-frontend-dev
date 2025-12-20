@@ -1,0 +1,216 @@
+.my-page {
+  width: 100%;
+  min-height: 100vh;
+  background: #f5f5f5;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0;
+}
+
+.my-page-mobile-frame {
+  width: 100%;
+  max-width: 428px;
+  background: white;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 상태 바 */
+.my-page-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #000;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.my-page-status-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.my-page-status-icon {
+  font-size: 14px;
+}
+
+/* 헤더 */
+.my-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.my-page-back-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  transition: opacity 0.2s;
+}
+
+.my-page-back-button:hover {
+  opacity: 0.7;
+}
+
+.my-page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+/* 콘텐츠 영역 */
+.my-page-content {
+  flex: 1;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 프로필 섹션 */
+.my-page-profile-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.my-page-avatar-container {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.my-page-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.my-page-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+}
+
+.my-page-username {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.my-page-email {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* 정보 카드 */
+.my-page-info-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.my-page-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.my-page-info-item:last-child {
+  border-bottom: none;
+}
+
+.my-page-info-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.my-page-info-value {
+  font-size: 14px;
+  color: #333;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.coin-icon {
+  font-size: 16px;
+}
+
+/* 액션 버튼 */
+.my-page-actions {
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.my-page-logout-button {
+  width: 100%;
+  padding: 16px;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.my-page-logout-button:hover {
+  background: #cc0000;
+  transform: translateY(-2px);
+}
+
+.my-page-logout-button:active {
+  transform: translateY(0);
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 16px;
+  color: #666;
+}
+
+@media (max-width: 1024px) {
+  .my-page-mobile-frame {
+    max-width: 100%;
+  }
+}
+

@@ -1,26 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useSocket } from '@/contexts/SocketContext';
-import { MachineStatus } from '@/types/session';
 import './LoginPage.css';
 
 const LoginPage: React.FC = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { connect, isConnected } = useSocket();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasNavigatedRef = useRef(false); // 跳转 상태 추적
 
-  // 기본 사용 가능한 기계 가져오기 (테스트용)
-  const getDefaultMachine = (): string => {
-    // API에서 가져온 첫 번째 기계 ID 사용 (없으면 기본값)
-    // 실제로는 API에서 가져온 첫 번째 사용 가능한 기계를 사용해야 함
-    // 테스트용으로는 첫 번째 기계 ID (1) 사용
-    return '1'; // machineId: 1 (백엔드 API의 첫 번째 기계)
+  // 获取跳转目标参数
+  const redirectTarget = searchParams.get('redirect'); // 'game' 或 'mypage'
+  const machineId = searchParams.get('machineId'); // 目标机器 ID
+
+  // 根据参数决定登录后跳转的目标
+  const getRedirectPath = (): string => {
+    // 优先读取 URL 参数
+    if (redirectTarget === 'game' && machineId) {
+      return `/game/${machineId}`;
+    } else if (redirectTarget === 'mypage') {
+      return '/mypage';
+    }
+    
+    // 如果 URL 没有参数，尝试从 localStorage 读取（用于 OAuth 回调）
+    const savedRedirectTarget = localStorage.getItem('oauth_redirect_target');
+    const savedMachineId = localStorage.getItem('oauth_redirect_machineId');
+    
+    if (savedRedirectTarget === 'game' && savedMachineId) {
+      return `/game/${savedMachineId}`;
+    } else if (savedRedirectTarget === 'mypage') {
+      return '/mypage';
+    }
+    
+    // 默认跳转到 My Page
+    return '/mypage';
   };
 
-  // 연결 상태 감시, 연결 성공 후 게임 화면으로 이동
+  // 연결 상태 감시, 연결 성공 후 목적지로 이동
   useEffect(() => {
     if (isConnected && isConnecting && !hasNavigatedRef.current) {
       if (timeoutRef.current) {
@@ -30,23 +49,44 @@ const LoginPage: React.FC = () => {
       
       hasNavigatedRef.current = true;
       setIsConnecting(false);
-      const defaultMachine = getDefaultMachine();
-      console.log('[Login] Socket 연결 성공, 게임 페이지로 이동:', `/game/${defaultMachine}`);
-      navigate(`/game/${defaultMachine}`);
+      const targetPath = getRedirectPath();
+      // 清除保存的 OAuth 跳转参数
+      localStorage.removeItem('oauth_redirect_target');
+      localStorage.removeItem('oauth_redirect_machineId');
+      console.log('[Login] Socket 연결 성공, 跳转到:', targetPath);
+      navigate(targetPath);
     }
-  }, [isConnected, isConnecting, navigate]);
+  }, [isConnected, isConnecting, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 컴포넌트 마운트 시 상태 초기화
+  // 컴포넌트 마운트 시 상태 초기화 및登录状态检查
   useEffect(() => {
     hasNavigatedRef.current = false;
     setIsConnecting(false);
+    
+    // 检查是否有登录状态（localStorage）
+    const savedUserId = localStorage.getItem('userId');
+    const authToken = localStorage.getItem('authToken');
+    const mockLogin = localStorage.getItem('mockLogin') === 'true';
+    
+    // 如果已登录，根据参数跳转
+    if (savedUserId && (authToken || mockLogin)) {
+      const targetPath = getRedirectPath();
+      console.log('[LoginPage] 检测到登录状态，自动跳转到:', targetPath);
+      // 如果 Socket 未连接，先尝试连接
+      if (!isConnected) {
+        connect(savedUserId);
+      }
+      // 跳转到目标页面
+      navigate(targetPath);
+    }
+    
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBack = () => {
     navigate('/');
@@ -81,14 +121,17 @@ const LoginPage: React.FC = () => {
     // Socket 연결 시도
     connect(userInfo.userId);
 
-    // 타임아웃 설정: 1초 후 게임 페이지로 이동 (Socket 연결을 기다리지 않음)
+    // 타임아웃 설정: 1초 후 목적지로 이동 (Socket 연결을 기다리지 않음)
     timeoutRef.current = setTimeout(() => {
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
         setIsConnecting(false);
-        const defaultMachine = getDefaultMachine();
-        console.log('[Mock Login] 타임아웃, 게임 페이지로 이동:', `/game/${defaultMachine}`);
-        navigate(`/game/${defaultMachine}`);
+        const targetPath = getRedirectPath();
+        // 清除保存的 OAuth 跳转参数
+        localStorage.removeItem('oauth_redirect_target');
+        localStorage.removeItem('oauth_redirect_machineId');
+        console.log('[Mock Login] 타임아웃, 跳转到:', targetPath);
+        navigate(targetPath);
       }
     }, 1000);
   };
@@ -154,8 +197,8 @@ const LoginPage: React.FC = () => {
         if (isConnecting) {
           console.warn('[OAuth] Socket 연결이 지연되고 있습니다. 계속 진행합니다.');
           setIsConnecting(false);
-          const defaultMachine = getDefaultMachine();
-          navigate(`/game/${defaultMachine}`);
+          const targetPath = getRedirectPath();
+          navigate(targetPath);
         }
       }, 5000);
 
@@ -176,6 +219,15 @@ const LoginPage: React.FC = () => {
   const handleGoogleLoginSuccess = async (tokenResponse: any) => {
     setIsConnecting(true);
     hasNavigatedRef.current = false;
+
+    // 保存跳转参数到 localStorage，以便后续使用
+    if (redirectTarget) {
+      localStorage.setItem('oauth_redirect_target', redirectTarget);
+    }
+    if (machineId) {
+      localStorage.setItem('oauth_redirect_machineId', machineId);
+    }
+    console.log('[Google OAuth] 保存跳转参数:', { redirectTarget, machineId });
 
     try {
       console.log('[Google OAuth] 登录成功，获取用户信息...');
@@ -257,14 +309,17 @@ const LoginPage: React.FC = () => {
       // Socket 连接
       connect(String(userId));
 
-      // 设置超时：1秒后跳转到游戏页面
+      // 设置超时：1秒后跳转到目标页面
       timeoutRef.current = setTimeout(() => {
         if (!hasNavigatedRef.current) {
           hasNavigatedRef.current = true;
           setIsConnecting(false);
-          const defaultMachine = getDefaultMachine();
-          console.log('[Google OAuth] 跳转到游戏页面:', `/game/${defaultMachine}`);
-          navigate(`/game/${defaultMachine}`);
+          const targetPath = getRedirectPath();
+          // 清除保存的 OAuth 跳转参数
+          localStorage.removeItem('oauth_redirect_target');
+          localStorage.removeItem('oauth_redirect_machineId');
+          console.log('[Google OAuth] 跳转到:', targetPath);
+          navigate(targetPath);
         }
       }, 1000);
 
@@ -292,6 +347,15 @@ const LoginPage: React.FC = () => {
       handleMockLogin('google');
       return;
     }
+
+    // 保存跳转参数到 localStorage，以便 OAuth 回调后使用
+    if (redirectTarget) {
+      localStorage.setItem('oauth_redirect_target', redirectTarget);
+    }
+    if (machineId) {
+      localStorage.setItem('oauth_redirect_machineId', machineId);
+    }
+    console.log('[Login] 保存 OAuth 跳转参数:', { redirectTarget, machineId });
 
     // 获取 redirect_uri
     const getRedirectUri = () => {
@@ -327,7 +391,8 @@ const LoginPage: React.FC = () => {
       `redirect_uri=${encodedRedirectUri}&` +
       `response_type=${responseType}&` +
       `scope=${encodeURIComponent(scope)}&` +
-      `include_granted_scopes=true`;
+      `include_granted_scopes=true&` +
+      `prompt=consent`; // 强制用户重新授权，即使浏览器中保持 Google 账户登录状态
     
     console.log('[Login] ========== OAuth URL 详细信息 ==========');
     console.log('[Login] 原始 Redirect URI:', redirectUri);
@@ -362,6 +427,7 @@ const LoginPage: React.FC = () => {
     onSuccess: handleGoogleLoginSuccess,
     onError: handleGoogleLoginError,
     flow: 'implicit', // 使用 implicit flow (纯前端，直接获取 access_token)
+    prompt: 'consent', // 强制用户重新授权，即使浏览器中保持 Google 账户登录状态
   });
 
   // 社交登录处理函数

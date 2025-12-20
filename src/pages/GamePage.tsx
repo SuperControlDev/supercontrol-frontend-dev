@@ -8,6 +8,16 @@ import './GamePage.css';
 
 const GamePage: React.FC = () => {
   const { machineId } = useParams<{ machineId: string }>();
+  // 从 localStorage 读取游戏主题和标题
+  const [gameTheme, setGameTheme] = useState<string>(() => {
+    const savedTheme = localStorage.getItem(`game_theme_${machineId}`);
+    return savedTheme || 'default';
+  });
+  const [gameTitle, setGameTitle] = useState<string>(() => {
+    const savedTitle = localStorage.getItem(`game_title_${machineId}`);
+    return savedTitle || '블랙핑크 굿즈 뽑기'; // 默认标题
+  });
+  
   // Red5 스트림 설정 (RTMP -> HLS)
   // RTMP: rtmp://192.168.45.48:1935/live/mystream
   // HLS: http://192.168.45.48:5080/live/mystream/playlist.m3u8
@@ -25,6 +35,7 @@ const GamePage: React.FC = () => {
     isConnected,
     session,
     socket,
+    connect,
     createSession,
     leaveSession,
     moveClaw,
@@ -34,10 +45,14 @@ const GamePage: React.FC = () => {
   const [userId] = useState(() => {
     return localStorage.getItem('userId') || 'user-001';
   });
+  // 检查是否是模拟登录
+  const [isMockLogin] = useState(() => {
+    return localStorage.getItem('mockLogin') === 'true';
+  });
   const [currentTime, setCurrentTime] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'chat' | 'prize'>('chat');
   const [viewers, setViewers] = useState(25);
-  const [remainingTime, setRemainingTime] = useState(23);
+  const [remainingTime, setRemainingTime] = useState(30);
   const [myCoins, setMyCoins] = useState(() => {
     // 从 localStorage 读取余额，如果没有则使用默认值
     const balance = localStorage.getItem('balance');
@@ -68,6 +83,35 @@ const GamePage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 监听 machineId 变化，更新主题和标题
+  useEffect(() => {
+    if (machineId) {
+      // 更新主题
+      const savedTheme = localStorage.getItem(`game_theme_${machineId}`);
+      const theme = savedTheme || `theme-${machineId}`;
+      setGameTheme(theme);
+      console.log('[GamePage] 应用游戏主题:', theme, '机器:', machineId);
+      
+      // 更新标题
+      const savedTitle = localStorage.getItem(`game_title_${machineId}`);
+      const title = savedTitle || '블랙핑크 굿즈 뽑기';
+      setGameTitle(title);
+      console.log('[GamePage] 应用游戏标题:', title, '机器:', machineId);
+      
+      // 应用主题到页面根元素
+      const gamePageElement = document.querySelector('.game-page');
+      if (gamePageElement) {
+        // 移除所有旧的主题类
+        gamePageElement.className = gamePageElement.className
+          .split(' ')
+          .filter(cls => !cls.startsWith('theme-'))
+          .join(' ');
+        // 添加新的主题类
+        gamePageElement.classList.add(theme);
+      }
+    }
+  }, [machineId]);
+
   // 타이머 업데이트 - 게임 시작 후에만 작동
   useEffect(() => {
     if (!gameStarted) {
@@ -78,13 +122,36 @@ const GamePage: React.FC = () => {
       setRemainingTime((prev) => {
         if (prev > 0) {
           return prev - 1;
+        } else {
+          // 时间到，自动结束游戏，回到游戏开始前的页面
+          console.log('[GamePage] 게임 시간 종료 (30초), 자동 종료');
+          setGameStarted(false);
+          setUseWebRTC(false); // HLS로 전환
+          setGameSuccess(false); // 重置游戏成功状态
+          // 直接返回30，不返回0，这样倒计时会显示30
+          return 30;
         }
-        return 0;
       });
     }, 1000);
     
     return () => clearInterval(timer);
   }, [gameStarted]);
+
+  // 页面加载时检查登录状态，如果有登录信息则自动恢复 Socket 连接
+  useEffect(() => {
+    const savedUserId = localStorage.getItem('userId');
+    const authToken = localStorage.getItem('authToken');
+    const mockLogin = localStorage.getItem('mockLogin') === 'true';
+    
+    // 如果有登录信息（真实登录或模拟登录），自动连接 Socket
+    if (savedUserId && (authToken || mockLogin)) {
+      console.log('[GamePage] 检测到登录状态，自动恢复 Socket 连接');
+      if (!isConnected && !socket?.connected) {
+        connect(savedUserId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 只在组件挂载时执行一次
 
   useEffect(() => {
     if (isConnected && machineId && !session) {
@@ -107,7 +174,7 @@ const GamePage: React.FC = () => {
       setGameStarted(false);
       setGameSuccess(false);
       setUseWebRTC(false); // HLS로 전환
-      setRemainingTime(23); // 타이머 리셋
+      setRemainingTime(30); // 타이머 리셋
       // TODO: 서버에 게임 종료 알림 (필요한 경우)
       return;
     }
@@ -129,7 +196,8 @@ const GamePage: React.FC = () => {
       return;
     }
 
-    if (!userId) {
+    // 模拟登录时，允许游戏开始，不检查 userId
+    if (!isMockLogin && !userId) {
       alert('사용자 ID가 없습니다. 다시 로그인해주세요.');
       navigate('/login');
       return;
@@ -144,6 +212,19 @@ const GamePage: React.FC = () => {
     setIsStartingGame(true);
 
     try {
+      // 模拟登录时，跳过 API 调用，直接开始游戏
+      if (isMockLogin) {
+        console.log('[GamePage] 模拟登录模式，跳过 API 调用，直接开始游戏');
+        
+        // 设置游戏状态
+        setRemainingTime(30); // 默认游戏时长 30 秒
+        setGameStarted(true);
+        setUseWebRTC(true); // 게임 시작 시 WebRTC로 전환
+        
+        setIsStartingGame(false);
+        return;
+      }
+
       console.log('[GamePage] 게임 시작 API 호출');
       
       // 调用游戏开始 API
@@ -151,9 +232,15 @@ const GamePage: React.FC = () => {
       const backendApiUrl = import.meta.env.VITE_API_URL || '';
       const apiUrl = backendApiUrl ? `${backendApiUrl}/api/game/start` : '/api/game/start';
       
+      // 确保 userId 是数字
+      const numericUserId = parseInt(userId, 10);
+      if (isNaN(numericUserId)) {
+        throw new Error('사용자 ID가 유효하지 않습니다.');
+      }
+      
       const requestBody = {
         machineId: parseInt(machineId, 10),
-        userId: parseInt(userId, 10),
+        userId: numericUserId,
       };
 
       console.log('[GamePage] API 요청:', apiUrl);
@@ -197,7 +284,7 @@ const GamePage: React.FC = () => {
         localStorage.setItem('balance', String(remainingCoins));
 
         // 更新游戏时间（durationSec 秒）
-        const durationSec = data.durationSec || 45;
+        const durationSec = data.durationSec || 30;
         setRemainingTime(durationSec);
 
         // 如果有 sessionId，更新 session（如果需要）
@@ -290,7 +377,7 @@ const GamePage: React.FC = () => {
     }
     // 코인 차감 및 게임 재시작
     setMyCoins((prev) => prev - 10);
-    setRemainingTime(23); // 타이머 초기화
+    setRemainingTime(30); // 타이머 초기화
     setGameSuccess(false);
     setGameStarted(true);
     setUseWebRTC(true); // 게임 재시작 시 WebRTC로 전환
@@ -343,7 +430,7 @@ const GamePage: React.FC = () => {
 
         {/* 게임 제목 및 참가자 */}
         <div className="game-title-section">
-          <h2 className="game-title">블랙핑크 굿즈 뽑기</h2>
+          <h2 className="game-title">{gameTitle}</h2>
           <div className="game-participants">
             <div className="participant-avatar">👤</div>
             <div className="participant-avatar">👩</div>
@@ -357,7 +444,7 @@ const GamePage: React.FC = () => {
           <div className="game-video-container">
             {machineId && (
               <>
-                {/* HLS 播放器 - 游戏开始前显示，开始后隐藏 */}
+                {/* HLS 播放器 - 游戏开始前显示，游戏结束后显示 */}
                 <div style={{ 
                   display: gameStarted && useWebRTC ? 'none' : 'block',
                   width: '100%',
@@ -372,30 +459,32 @@ const GamePage: React.FC = () => {
                   />
                 </div>
                 
-                {/* WebRTC 播放器 - 后台预加载，游戏开始时显示 */}
-                <div style={{ 
-                  display: gameStarted && useWebRTC ? 'block' : 'none',
-                  width: '100%',
-                  height: '100%',
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  zIndex: gameStarted && useWebRTC ? 1 : 0
-                }}>
-                  <WebRTCPlayer 
-                    machineId={machineId}
-                    sessionId={session?.sessionId}
-                    streamUrl={`http://${red5Host}:${red5Port}/live/viewer.jsp?host=${red5Host}&stream=${streamName}`}
-                    app="live"
-                    streamName={streamName}
-                    red5Host={red5Host}
-                    red5Port={red5Port} // HTTP 端口 5080 使用 (WHEP 使用 HTTP)
-                    useRed5ProSDK={true}
-                    useSDKPlayer={true} // 使用 SDK 播放器模式
-                    licenseKey={licenseKey} // Red5 Pro SDK 许可证密钥 (如果需要)
-                    onFallbackToHLS={handleWebRTCFallback} // WebRTC 실패 시 HLS로 전환
-                  />
-                </div>
+                {/* WebRTC 播放器 - 只在游戏开始时加载，游戏结束后卸载 */}
+                {gameStarted && useWebRTC && (
+                  <div style={{ 
+                    display: 'block',
+                    width: '100%',
+                    height: '100%',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    zIndex: 1
+                  }}>
+                    <WebRTCPlayer 
+                      machineId={machineId}
+                      sessionId={session?.sessionId}
+                      streamUrl={`http://${red5Host}:${red5Port}/live/viewer.jsp?host=${red5Host}&stream=${streamName}`}
+                      app="live"
+                      streamName={streamName}
+                      red5Host={red5Host}
+                      red5Port={red5Port} // HTTP 端口 5080 使用 (WHEP 使用 HTTP)
+                      useRed5ProSDK={true}
+                      useSDKPlayer={true} // 使用 SDK 播放器模式
+                      licenseKey={licenseKey} // Red5 Pro SDK 许可证密钥 (如果需要)
+                      onFallbackToHLS={handleWebRTCFallback} // WebRTC 실패 시 HLS로 전환
+                    />
+                  </div>
+                )}
               </>
             )}
           </div>

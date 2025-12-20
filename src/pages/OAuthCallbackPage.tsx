@@ -1,16 +1,25 @@
-import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSocket } from '@/contexts/SocketContext';
 import './OAuthCallbackPage.css';
 
 const OAuthCallbackPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { connect } = useSocket();
+  const hasProcessedRef = useRef(false); // 防重复执行的标志
 
   useEffect(() => {
+    // 如果已经处理过，直接返回（防止 React StrictMode 和重复执行）
+    if (hasProcessedRef.current) {
+      console.log('[OAuth Callback] 已经处理过回调，跳过重复执行');
+      return;
+    }
+
     const handleOAuthCallback = async () => {
       try {
+        // 立即设置标志，防止重复执行
+        hasProcessedRef.current = true;
+        
         console.log('[OAuth Callback] 开始处理回调...');
         console.log('[OAuth Callback] 当前 URL:', window.location.href);
         console.log('[OAuth Callback] URL Hash:', window.location.hash);
@@ -22,15 +31,17 @@ const OAuthCallbackPage: React.FC = () => {
         const queryParams = new URLSearchParams(window.location.search);
         
         // 优先从 hash 中获取（implicit flow），如果没有则从 query string 获取
-        const accessToken = hashParams.get('access_token') || queryParams.get('access_token') || searchParams.get('access_token');
-        const error = hashParams.get('error') || queryParams.get('error') || searchParams.get('error');
-        const code = hashParams.get('code') || queryParams.get('code') || searchParams.get('code');
+        const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+        const error = hashParams.get('error') || queryParams.get('error');
+        const code = hashParams.get('code') || queryParams.get('code');
         
         console.log('[OAuth Callback] 解析的参数:', { accessToken: accessToken ? '已找到' : '未找到', error, code: code ? '已找到' : '未找到' });
 
         if (error) {
           console.error('[OAuth Callback] Google 返回错误:', error);
           const errorDescription = hashParams.get('error_description') || queryParams.get('error_description') || '';
+          // 错误时重置标志，允许重试
+          hasProcessedRef.current = false;
           alert(`Google 登录失败: ${error}${errorDescription ? '\n' + errorDescription : ''}`);
           navigate('/login');
           return;
@@ -43,16 +54,22 @@ const OAuthCallbackPage: React.FC = () => {
         } else if (code) {
           // Authorization code flow: 需要交换 token
           console.log('[OAuth Callback] 收到 authorization code');
+          // 错误时重置标志，允许重试
+          hasProcessedRef.current = false;
           alert('Authorization code flow 暂未实现，请使用 implicit flow');
           navigate('/login');
         } else {
           console.error('[OAuth Callback] ❌ 未找到 token 或 code');
           console.error('[OAuth Callback] Hash 参数:', Object.fromEntries(hashParams));
           console.error('[OAuth Callback] Query 参数:', Object.fromEntries(queryParams));
+          // 错误时重置标志，允许重试
+          hasProcessedRef.current = false;
           alert('OAuth 回调参数无效，请检查 URL 是否正确');
           navigate('/login');
         }
       } catch (err) {
+        // 错误时重置标志，允许重试
+        hasProcessedRef.current = false;
         console.error('[OAuth Callback] ❌ 处理错误:', err);
         if (err instanceof Error) {
           console.error('[OAuth Callback] 错误详情:', err.message, err.stack);
@@ -65,7 +82,8 @@ const OAuthCallbackPage: React.FC = () => {
     };
 
     handleOAuthCallback();
-  }, [searchParams, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 只在组件挂载时执行一次，移除 searchParams 和 navigate 依赖
 
   const handleGoogleLoginSuccess = async (accessToken: string) => {
     try {
@@ -123,14 +141,20 @@ const OAuthCallbackPage: React.FC = () => {
       const providerUserId = `google_${userInfo.id}`;
       console.log('[OAuth Callback] Provider User ID:', providerUserId);
 
+      // 提取 username（Google Name）和头像
+      const googleName = userInfo.name || userInfo.email || 'Google User';
+      const googlePicture = userInfo.picture || '';
+      console.log('[OAuth Callback] Google Name:', googleName);
+      console.log('[OAuth Callback] Google Picture:', googlePicture);
+
       // 调用后端 OAuth 登录 API
       // POST /api/auth/google
-      // Request Body: { "providerUserId": "google_12345" }
+      // Request Body: { "providerUserId": "google_12345", "username": "John Doe" }
       const backendApiUrl = import.meta.env.VITE_API_URL || '';
       const apiUrl = backendApiUrl ? `${backendApiUrl}/api/auth/google` : '/api/auth/google';
       
       console.log('[OAuth Callback] 调用后端 API:', apiUrl);
-      console.log('[OAuth Callback] 请求体:', { providerUserId });
+      console.log('[OAuth Callback] 请求体:', { providerUserId, username: googleName });
       
       let backendResponse;
       try {
@@ -141,6 +165,7 @@ const OAuthCallbackPage: React.FC = () => {
           },
           body: JSON.stringify({
             providerUserId: providerUserId,
+            username: googleName,
           }),
         });
         console.log('[OAuth Callback] 后端 API 响应状态:', backendResponse.status);
@@ -169,16 +194,6 @@ const OAuthCallbackPage: React.FC = () => {
           errorMessage = errorText || errorMessage;
         }
         
-        // 检查是否是数据库配置错误
-        if (errorText.includes("Field 'user_id' doesn't have a default value") || 
-            errorText.includes("user_id") && errorText.includes("default value")) {
-          errorMessage = '数据库配置错误：user_id 字段需要设置为 AUTO_INCREMENT。\n\n' +
-            '请后端开发人员检查数据库表 t_l_users 的 user_id 字段配置：\n' +
-            '1. 确保 user_id 字段设置为 AUTO_INCREMENT\n' +
-            '2. 或者确保 user_id 字段有默认值\n' +
-            '3. 或者修改后端代码，在插入时提供 user_id 值';
-        }
-        
         throw new Error(errorMessage);
       }
 
@@ -186,11 +201,11 @@ const OAuthCallbackPage: React.FC = () => {
       const backendData = await backendResponse.json();
       console.log('[OAuth Callback] 后端返回的用户信息:', backendData);
 
-      // 使用后端返回的用户信息（如果后端没有返回完整信息，使用 Google API 返回的信息）
+      // 使用后端返回的用户信息
       const userId = backendData.userId || backendData.id;
-      const username = backendData.username || userInfo.name || userInfo.email || 'Google User';
+      // 优先使用后端返回的 username，如果没有则使用 Google Name
+      const username = backendData.username || googleName;
       const email = userInfo.email || '';
-      const picture = userInfo.picture || '';
       const balance = backendData.balance || 0;
       const provider = backendData.provider || 'google';
 
@@ -200,8 +215,9 @@ const OAuthCallbackPage: React.FC = () => {
       localStorage.setItem('userEmail', email);
       localStorage.setItem('balance', String(balance));
       localStorage.setItem('provider', provider);
-      if (picture) {
-        localStorage.setItem('userAvatar', picture);
+      // 保存 Google 头像
+      if (googlePicture) {
+        localStorage.setItem('userAvatar', googlePicture);
       }
       localStorage.setItem('authToken', accessToken);
       localStorage.removeItem('mockLogin'); // 移除模拟登录标记
@@ -209,10 +225,25 @@ const OAuthCallbackPage: React.FC = () => {
       // Socket 连接
       connect(String(userId));
 
-      // 跳转到游戏页面
-      const defaultMachine = '1'; // 默认机器 ID
-      console.log('[OAuth Callback] 跳转到游戏页面:', `/game/${defaultMachine}`);
-      navigate(`/game/${defaultMachine}`);
+      // 读取保存的跳转参数
+      const savedRedirectTarget = localStorage.getItem('oauth_redirect_target');
+      const savedMachineId = localStorage.getItem('oauth_redirect_machineId');
+      
+      // 清除保存的参数
+      localStorage.removeItem('oauth_redirect_target');
+      localStorage.removeItem('oauth_redirect_machineId');
+
+      // 根据保存的参数决定跳转目标
+      let targetPath = '/mypage'; // 默认跳转到 My Page
+      if (savedRedirectTarget === 'game' && savedMachineId) {
+        targetPath = `/game/${savedMachineId}`;
+      } else if (savedRedirectTarget === 'mypage') {
+        targetPath = '/mypage';
+      }
+
+      // 跳转到目标页面
+      console.log('[OAuth Callback] 跳转到:', targetPath);
+      navigate(targetPath);
     } catch (err) {
       console.error('[OAuth Callback] ❌ 登录处理错误:', err);
       if (err instanceof Error) {
