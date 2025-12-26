@@ -12,8 +12,8 @@ interface GameVideoProps {
 const GameVideo: React.FC<GameVideoProps> = ({ 
   machineId, 
   streamName = 'test',
-  red5Host = 'localhost',
-  red5Port = 5080 
+  red5Host = import.meta.env.VITE_RED5PRO_HOST || 'localhost',
+  red5Port = parseInt(import.meta.env.VITE_RED5PRO_HTTP_PORT || '5080', 10)
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);

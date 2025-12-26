@@ -14,7 +14,7 @@ interface GameCard {
   tags: string[];
   imageUrl?: string;
   machineId: string | number; // API에서 받은 실제 machineId
-  theme?: string; // 主题颜色或主题名称
+  theme?: string; // 테마 색상 또는 테마 이름
 }
 
 // API에서 받은 기계 데이터 타입
@@ -29,7 +29,7 @@ interface ApiMachine {
   description?: string;
   viewers?: number;
   tags?: string[];
-  theme?: string; // 主题信息
+  theme?: string; // 테마 정보
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -106,7 +106,7 @@ const MobileAppSection: React.FC = () => {
             isLive,
             tags: machine.tags || ['인형뽑기'],
             imageUrl: machine.thumbnailUrl || machine.imageUrl,
-            theme: machine.theme || `theme-${machineIdStr}`, // 使用后端提供的主题，或生成默认主题
+            theme: machine.theme || `theme-${machineIdStr}`, // 백엔드에서 제공한 테마 사용, 또는 기본 테마 생성
           };
         }).filter((card): card is GameCard => card !== null);
         
@@ -137,23 +137,23 @@ const MobileAppSection: React.FC = () => {
   };
 
   const handlePlayGame = () => {
-    // 检查是否有登录状态（localStorage）
+    // 로그인 상태 확인 (localStorage)
     const savedUserId = localStorage.getItem('userId');
     const authToken = localStorage.getItem('authToken');
     const mockLogin = localStorage.getItem('mockLogin') === 'true';
     
-    // 如果已登录，直接进入游戏页面（Socket 连接会在 GamePage 中自动恢复）
+    // 이미 로그인한 경우 게임 페이지로 바로 이동 (Socket 연결은 GamePage에서 자동 복원)
     if (savedUserId && (authToken || mockLogin)) {
-      console.log('[MobileAppSection] 检测到登录状态，直接进入游戏页面');
-      // 如果 Socket 未连接，先尝试连接（可选，GamePage 也会处理）
+      console.log('[MobileAppSection] 로그인 상태 감지, 게임 페이지로 이동');
+      // Socket이 연결되지 않은 경우 연결 시도 (선택사항, GamePage에서도 처리)
       if (!isConnected) {
         connect(savedUserId);
       }
-      // 第一个可用的机器开始游戏
+      // 첫 번째 사용 가능한 기계로 게임 시작
       const availableMachine = gameCards.find(card => card.isLive);
       const targetCard = availableMachine || gameCards[0];
       if (targetCard) {
-        // 保存游戏主题和标题
+        // 게임 테마 및 제목 저장
         if (targetCard.theme) {
           localStorage.setItem(`game_theme_${targetCard.machineId}`, targetCard.theme);
         }
@@ -167,13 +167,13 @@ const MobileAppSection: React.FC = () => {
       return;
     }
     
-    // 如果未登录，跳转到登录页面，并传递目标游戏信息
+    // 로그인하지 않은 경우 로그인 페이지로 이동하고 대상 게임 정보 전달
     if (!isConnected) {
       alert('먼저 로그인해주세요');
       const availableMachine = gameCards.find(card => card.isLive);
       const targetCard = availableMachine || gameCards[0];
       const targetMachineId = targetCard?.machineId || '1';
-      // 保存游戏主题和标题
+      // 게임 테마 및 제목 저장
       if (targetCard?.theme) {
         localStorage.setItem(`game_theme_${targetMachineId}`, targetCard.theme);
       }
@@ -187,7 +187,7 @@ const MobileAppSection: React.FC = () => {
     const availableMachine = gameCards.find(card => card.isLive);
     const targetCard = availableMachine || gameCards[0];
     if (targetCard) {
-      // 保存游戏主题和标题
+      // 게임 테마 및 제목 저장
       if (targetCard.theme) {
         localStorage.setItem(`game_theme_${targetCard.machineId}`, targetCard.theme);
       }
@@ -201,25 +201,25 @@ const MobileAppSection: React.FC = () => {
   };
 
   const handleCardClick = (card: GameCard) => {
-    // 检查是否有登录状态（localStorage）
+    // 로그인 상태 확인 (localStorage)
     const savedUserId = localStorage.getItem('userId');
     const authToken = localStorage.getItem('authToken');
     const mockLogin = localStorage.getItem('mockLogin') === 'true';
     
-    // 保存游戏主题和标题到 localStorage
+    // localStorage에 게임 테마 및 제목 저장
     if (card.theme) {
       localStorage.setItem(`game_theme_${card.machineId}`, card.theme);
-      console.log('[MobileAppSection] 保存游戏主题:', card.theme, '机器:', card.machineId);
+      console.log('[MobileAppSection] 게임 테마 저장:', card.theme, '기계:', card.machineId);
     }
     if (card.title) {
       localStorage.setItem(`game_title_${card.machineId}`, card.title);
-      console.log('[MobileAppSection] 保存游戏标题:', card.title, '机器:', card.machineId);
+      console.log('[MobileAppSection] 게임 제목 저장:', card.title, '기계:', card.machineId);
     }
     
-    // 如果已登录，直接进入游戏页面（Socket 连接会在 GamePage 中自动恢复）
+    // 이미 로그인한 경우 게임 페이지로 바로 이동 (Socket 연결은 GamePage에서 자동 복원)
     if (savedUserId && (authToken || mockLogin)) {
-      console.log('[MobileAppSection] 检测到登录状态，直接进入游戏页面');
-      // 如果 Socket 未连接，先尝试连接（可选，GamePage 也会处理）
+      console.log('[MobileAppSection] 로그인 상태 감지, 게임 페이지로 이동');
+      // Socket이 연결되지 않은 경우 연결 시도 (선택사항, GamePage에서도 처리)
       if (!isConnected) {
         connect(savedUserId);
       }
@@ -228,7 +228,7 @@ const MobileAppSection: React.FC = () => {
       return;
     }
     
-    // 如果未登录，跳转到登录页面，并传递目标游戏 machineId
+    // 로그인하지 않은 경우 로그인 페이지로 이동하고 대상 게임 machineId 전달
     if (!isConnected) {
       alert('먼저 로그인해주세요');
       navigate(`/login?redirect=game&machineId=${card.machineId}`);
@@ -239,16 +239,16 @@ const MobileAppSection: React.FC = () => {
   };
 
   const handleMyPageClick = () => {
-    // 检查是否有登录状态
+    // 로그인 상태 확인
     const savedUserId = localStorage.getItem('userId');
     const authToken = localStorage.getItem('authToken');
     const mockLogin = localStorage.getItem('mockLogin') === 'true';
     
-    // 如果已登录，跳转到 MyPage
+    // 이미 로그인한 경우 MyPage로 이동
     if (savedUserId && (authToken || mockLogin)) {
       navigate('/mypage');
     } else {
-      // 如果未登录，跳转到登录页面，并标记来源为 mypage
+      // 로그인하지 않은 경우 로그인 페이지로 이동하고 출처를 mypage로 표시
       alert('먼저 로그인해주세요');
       navigate('/login?redirect=mypage');
     }

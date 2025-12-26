@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useSocket } from '@/contexts/SocketContext';
 import './WebRTCPlayer.css';
 import type { RTCSubscriber, Red5ProSubscriberConfig } from '@/types/red5pro';
 
@@ -15,6 +14,8 @@ interface WebRTCPlayerProps {
   useSDKPlayer?: boolean; // 强制使用 SDK 播放器而不是 iframe (기본값: true)
   licenseKey?: string; // Red5 Pro SDK 许可证密钥 (如果需要)
   onFallbackToHLS?: () => void; // WebRTC 실패 시 HLS로 전환 콜백
+  onReady?: () => void; // WebRTC 准备好时的回调（用于无缝切换）
+  hidden?: boolean; // 是否隐藏但保持连接（用于预加载）
 }
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'failed';
@@ -23,24 +24,32 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
   machineId, 
   sessionId, 
   streamUrl,
-  app = 'live',
+  app = import.meta.env.VITE_RED5PRO_APP || 'live',
   streamName = 'mystream',
-  red5Host = 'localhost',
-  red5Port = 8081,
+  red5Host = import.meta.env.VITE_RED5PRO_HOST || 'localhost',
+  red5Port = parseInt(import.meta.env.VITE_RED5PRO_WEBRTC_PORT || '8081', 10),
   useRed5ProSDK = true,
   useSDKPlayer = true, // 默认使用 SDK 播放器
-  licenseKey, // Red5 Pro SDK 许可证密钥
-  onFallbackToHLS
+  licenseKey = import.meta.env.VITE_RED5PRO_LICENSE_KEY, // 从环境变量读取
+  onFallbackToHLS,
+  onReady, // WebRTC 准备好时的回调
+  hidden = false // 是否隐藏但保持连接
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const subscriberRef = useRef<RTCSubscriber | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null); // Fallback용
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectionStateRef = useRef<ConnectionState>('connecting'); // 用于超时回调检查当前状态（避免闭包问题）
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting'); // 初始状态改为 'connecting'，显示加载页面
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('WebRTC 연결 초기화 중...');
   const [useIframe, setUseIframe] = useState(false); // iframe 모드 사용 여부
-  const { socket, isConnected } = useSocket();
+  
+  // 辅助函数：同时更新状态和 ref（用于超时回调检查）
+  const updateConnectionState = (newState: ConnectionState) => {
+    connectionStateRef.current = newState;
+    setConnectionState(newState);
+  };
   
   // 确保视频持续播放（像测试页面一样）
   useEffect(() => {
@@ -58,6 +67,20 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
       }
     }
   }, [connectionState]);
+  
+  // WebRTC 连接成功时调用 onReady 回调（用于无缝切换）
+  const onReadyCalledRef = useRef(false); // 防止重复调用
+  useEffect(() => {
+    if (connectionState === 'connected' && onReady && !onReadyCalledRef.current) {
+      console.log('[WebRTC] ✅ WebRTC 연결 완료, onReady 콜백 호출');
+      onReadyCalledRef.current = true;
+      onReady();
+    }
+    // 连接断开时重置，以便下次连接时可以再次调用
+    if (connectionState === 'disconnected' || connectionState === 'failed') {
+      onReadyCalledRef.current = false;
+    }
+  }, [connectionState, onReady]);
   
   // 定期检查视频播放状态，确保持续播放
   useEffect(() => {
@@ -110,15 +133,27 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
       
       const handleCanPlay = () => {
         console.log('[WebRTC] ✅ 비디오 재생 가능');
-        setConnectionState('connected');
+        updateConnectionState('connected');
         setError(null);
+        // 连接成功，清除 30 秒超时
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+          console.log('[WebRTC] ✅ 연결 성공 (canplay), 30초 타임아웃 클리어');
+        }
       };
       
       const handlePlaying = () => {
         console.log('[WebRTC] ✅ 비디오 재생 중');
-        setConnectionState('connected');
+        updateConnectionState('connected');
         setError(null);
         setDebugInfo('비디오 스트림 재생 중');
+        // 连接成功，清除 30 秒超时
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+          connectionTimeoutRef.current = null;
+          console.log('[WebRTC] ✅ 연결 성공 (playing), 30초 타임아웃 클리어');
+        }
       };
       
       const handleWaiting = () => {
@@ -567,20 +602,32 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
           // 尝试播放
           currentVideo.play().then(() => {
             console.log('[Red5 Pro SDK] ✅ 비디오 재생 성공');
-            setConnectionState('connected');
+            updateConnectionState('connected');
             setError(null);
             setDebugInfo('비디오 스트림 재생 중');
+            // 连接成功，清除 30 秒超时
+            if (connectionTimeoutRef.current) {
+              clearTimeout(connectionTimeoutRef.current);
+              connectionTimeoutRef.current = null;
+              console.log('[Red5 Pro SDK] ✅ 연결 성공, 30초 타임아웃 클리어');
+            }
           }).catch((err) => {
             console.error('[Red5 Pro SDK] 자동 재생 실패:', err);
             // 即使自动播放失败，如果视频流已连接，也设置为 connected
             // 用户可以手动点击播放
             if (currentVideo.srcObject) {
-              setConnectionState('connected');
+              updateConnectionState('connected');
               setError(null);
               setDebugInfo('비디오 스트림 준비 완료 (클릭하여 재생)');
+              // 连接成功，清除 30 秒超时
+              if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+                console.log('[Red5 Pro SDK] ✅ 연결 성공 (재생 실패지만 스트림 있음), 30초 타임아웃 클리어');
+              }
             } else {
               setError(null);
-              setConnectionState('connecting');
+              updateConnectionState('connecting');
               setDebugInfo('비디오 재생 준비 중...');
             }
           });
@@ -681,13 +728,16 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         clearTimeout(connectionTimeoutRef.current);
       }
       connectionTimeoutRef.current = setTimeout(() => {
-        if (connectionState === 'connecting') {
-          console.error('[Red5 Pro SDK] 연결 타임아웃');
+        // 使用 ref 检查当前状态，避免闭包问题
+        if (connectionStateRef.current === 'connecting') {
+          console.error('[Red5 Pro SDK] 연결 타임아웃 (30초) - 연결이 아직 완료되지 않음');
           // 不显示错误，保持连接中状态
           setError(null);
-          setConnectionState('connecting');
+          updateConnectionState('connecting');
           setDebugInfo('연결 시도 중...');
           // WebRTC 타임아웃 시 HLS로 자동 전환하지 않음
+        } else {
+          console.log('[Red5 Pro SDK] 타임아웃 발생했지만 이미 연결됨, 무시:', connectionStateRef.current);
         }
       }, 30000);
 
@@ -785,29 +835,59 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
                   console.log('[Red5 Pro SDK] ✅ 从 view 复制视频流', 'info');
                   // 设置视频流后尝试播放并更新状态
                   currentVideo.play().then(() => {
-                    setConnectionState('connected');
+                    updateConnectionState('connected');
+                    // 连接成功，清除 30 秒超时
+                    if (connectionTimeoutRef.current) {
+                      clearTimeout(connectionTimeoutRef.current);
+                      connectionTimeoutRef.current = null;
+                      console.log('[Red5 Pro SDK] ✅ 연결 성공 (getView 후 재생), 30초 타임아웃 클리어');
+                    }
                   }).catch((err) => {
                     console.warn('[Red5 Pro SDK] 自动播放失败:', err);
                     // 即使播放失败，如果流已设置，也设置为 connected
                     if (currentVideo.srcObject) {
-                      setConnectionState('connected');
+                      updateConnectionState('connected');
+                      // 连接成功，清除 30 秒超时
+                      if (connectionTimeoutRef.current) {
+                        clearTimeout(connectionTimeoutRef.current);
+                        connectionTimeoutRef.current = null;
+                        console.log('[Red5 Pro SDK] ✅ 연결 성공 (getView 후 재생 실패지만 스트림 있음), 30초 타임아웃 클리어');
+                      }
                     }
                   });
                 } else if (view === currentVideo) {
                   console.log('[Red5 Pro SDK] ✅ view 就是当前视频元素', 'info');
-                  setConnectionState('connected');
+                  updateConnectionState('connected');
+                  // 连接成功，清除 30 秒超时
+                  if (connectionTimeoutRef.current) {
+                    clearTimeout(connectionTimeoutRef.current);
+                    connectionTimeoutRef.current = null;
+                    console.log('[Red5 Pro SDK] ✅ 연결 성공 (view가 현재 비디오 요소), 30초 타임아웃 클리어');
+                  }
                 }
               } else if (view && view.srcObject) {
                 currentVideo.srcObject = view.srcObject;
                 console.log('[Red5 Pro SDK] ✅ 从 view.srcObject 设置视频流', 'info');
                 // 设置视频流后尝试播放并更新状态
                 currentVideo.play().then(() => {
-                  setConnectionState('connected');
+                  updateConnectionState('connected');
+                  // 连接成功，清除 30 秒超时
+                  if (connectionTimeoutRef.current) {
+                    clearTimeout(connectionTimeoutRef.current);
+                    connectionTimeoutRef.current = null;
+                    console.log('[Red5 Pro SDK] ✅ 연결 성공 (view.srcObject 후 재생), 30초 타임아웃 클리어');
+                  }
                 }).catch((err) => {
                   console.warn('[Red5 Pro SDK] 自动播放失败:', err);
                   // 即使播放失败，如果流已设置，也设置为 connected
                   if (currentVideo.srcObject) {
-                    setConnectionState('connected');
+                    updateConnectionState('connected');
+                    // 连接成功，清除 30 秒超时
+                    if (connectionTimeoutRef.current) {
+                      clearTimeout(connectionTimeoutRef.current);
+                      connectionTimeoutRef.current = null;
+                      console.log('[Red5 Pro SDK] ✅ 연결 성공 (view.srcObject 후 재생 실패지만 스트림 있음), 30초 타임아웃 클리어');
+                    }
                   }
                 });
               }
@@ -891,12 +971,15 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         clearTimeout(connectionTimeoutRef.current);
       }
       connectionTimeoutRef.current = setTimeout(() => {
-        if (connectionState === 'connecting') {
-          console.error('[WebRTC] 연결 타임아웃');
+        // 使用 ref 检查当前状态，避免闭包问题
+        if (connectionStateRef.current === 'connecting') {
+          console.error('[WebRTC] 연결 타임아웃 (30초) - 연결이 아직 완료되지 않음');
           // 不显示错误，保持连接中状态
           setError(null);
-          setConnectionState('connecting');
+          updateConnectionState('connecting');
           setDebugInfo('연결 시도 중...');
+        } else {
+          console.log('[WebRTC] 타임아웃 발생했지만 이미 연결됨, 무시:', connectionStateRef.current);
         }
       }, 30000);
 
@@ -910,14 +993,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         if (event.candidate) {
           console.log('[WebRTC] ICE candidate 생성:', event.candidate);
           setDebugInfo(`ICE candidate 생성: ${event.candidate.candidate?.substring(0, 50)}...`);
-          // Socket이 있으면 전송, 없으면 무시 (직접 연결 모드)
-          if (socket?.connected) {
-            socket.emit('webrtc:ice-candidate', {
-              machineId,
-              sessionId,
-              candidate: event.candidate,
-            });
-          }
+          // HTTP API 方式使用，不需要通过 Socket 发送 ICE candidate
         } else if (!event.candidate) {
           console.log('[WebRTC] ICE candidate 수집 완료');
           setDebugInfo('ICE candidate 수집 완료');
@@ -931,22 +1007,23 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         setDebugInfo(`ICE 상태: ${state}`);
         
         if (state === 'connected' || state === 'completed') {
-          setConnectionState('connected');
+          updateConnectionState('connected');
           setError(null);
           if (connectionTimeoutRef.current) {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
+            console.log('[WebRTC] ✅ ICE 연결 성공, 30초 타임아웃 클리어');
           }
           setDebugInfo('WebRTC 연결 성공');
         } else if (state === 'disconnected') {
           console.warn('[WebRTC] ICE 연결 끊김');
-          setConnectionState('connecting');
+          updateConnectionState('connecting');
           setError(null);
           setDebugInfo('연결 재시도 중...');
         } else if (state === 'failed') {
           console.error('[WebRTC] ICE 연결 실패');
           // 不显示错误，保持连接中状态
-          setConnectionState('connecting');
+          updateConnectionState('connecting');
           setError(null);
           setDebugInfo('연결 시도 중...');
           // 재연결 시도
@@ -993,16 +1070,22 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
           });
           
           videoRef.current.srcObject = stream;
-          setConnectionState('connected');
+          updateConnectionState('connected');
           setError(null);
           setDebugInfo('비디오 스트림 수신 완료');
+          // 连接成功，清除 30 秒超时
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+            console.log('[WebRTC] ✅ 연결 성공 (ontrack), 30초 타임아웃 클리어');
+          }
           
           // 비디오 재생 시도
           videoRef.current.play().catch((err) => {
             console.error('[WebRTC] 비디오 재생 실패:', err);
             // 不显示错误，保持连接中状态
             setError(null);
-            setConnectionState('connecting');
+            updateConnectionState('connecting');
             setDebugInfo('비디오 재생 준비 중...');
           });
         } else {
@@ -1114,21 +1197,12 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
           setDebugInfo('API 연결 실패, HTML 페이지를 iframe으로 로드합니다.');
           return;
         }
-      } else if (socket?.connected) {
-        // Socket을 통한 연결
-        setDebugInfo('서버로 offer 전송 중...');
-        socket.emit('webrtc:offer', {
-          machineId,
-          sessionId,
-          offer: offer,
-        });
-        console.log('[WebRTC] webrtc:offer 이벤트 전송 완료', { machineId, sessionId });
-        setDebugInfo('서버에 offer 전송 완료, answer 대기 중...');
       } else {
-        // 연결 방법이 없음
-        setDebugInfo('WebRTC流URL 또는 Socket 연결이 필요합니다.');
-        console.warn('[WebRTC] 연결 방법이 없습니다.');
-        throw new Error('WebRTC流URL 또는 Socket 연결이 필요합니다.');
+        // streamUrl이 없으면 iframe 모드로 전환
+        console.warn('[WebRTC] streamUrl이 없습니다, iframe 모드로 전환');
+        setUseIframe(true);
+        setDebugInfo('streamUrl이 없어 iframe 모드로 전환합니다.');
+        return;
       }
 
     } catch (err) {
@@ -1145,84 +1219,9 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
     }
   };
 
-  // WebRTC 이벤트 리스너 설정
-  useEffect(() => {
-    if (!socket) {
-      return;
-    }
-
-    // SDP answer 수신
-    const handleAnswer = async (data: { answer: RTCSessionDescriptionInit }) => {
-      console.log('[WebRTC] webrtc:answer 이벤트 수신:', data);
-      
-      if (!peerConnectionRef.current) {
-        console.error('[WebRTC] peerConnection이 없습니다');
-        setError('연결이 초기화되지 않았습니다.');
-        return;
-      }
-
-      try {
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-          connectionTimeoutRef.current = null;
-        }
-        
-        await peerConnectionRef.current.setRemoteDescription(
-          new RTCSessionDescription(data.answer)
-        );
-        console.log('[WebRTC] SDP answer 수신 및 설정 완료');
-        setDebugInfo('SDP answer 설정 완료, ICE 연결 대기 중...');
-      } catch (err) {
-        console.error('[WebRTC] SDP answer 설정 오류:', err);
-        // 不显示错误，保持连接中状态
-        setError(null);
-        setConnectionState('connecting');
-        setDebugInfo('연결 설정 중...');
-      }
-    };
-
-    // ICE candidate 수신
-    const handleIceCandidate = async (data: { candidate: RTCIceCandidateInit }) => {
-      if (!peerConnectionRef.current) {
-        return;
-      }
-
-      try {
-        await peerConnectionRef.current.addIceCandidate(
-          new RTCIceCandidate(data.candidate)
-        );
-        console.log('ICE candidate 추가 완료');
-      } catch (err) {
-        console.error('ICE candidate 추가 오류:', err);
-      }
-    };
-
-    // WebRTC 오류 처리
-    const handleWebRTCError = (data: { message: string }) => {
-      console.error('WebRTC 오류:', data.message);
-      // 不显示错误，保持连接中状态
-      setError(null);
-      setConnectionState('connecting');
-      setDebugInfo('연결 시도 중...');
-    };
-
-    socket.on('webrtc:answer', handleAnswer);
-    socket.on('webrtc:ice-candidate', handleIceCandidate);
-    socket.on('webrtc:error', handleWebRTCError);
-
-    return () => {
-      socket.off('webrtc:answer', handleAnswer);
-      socket.off('webrtc:ice-candidate', handleIceCandidate);
-      socket.off('webrtc:error', handleWebRTCError);
-    };
-  }, [socket]);
-
-  // WebRTC 초기화 (Socket 없이도 작동)
+  // WebRTC 초기화 (HTTP API 方式，不需要 Socket)
   useEffect(() => {
     console.log('[WebRTC] 컴포넌트 마운트/업데이트', { 
-      socket: socket ? 'exists' : 'null',
-      socketConnected: socket?.connected, 
-      isConnected, 
       machineId, 
       sessionId,
       streamUrl,
@@ -1437,22 +1436,6 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [machineId, sessionId, streamUrl, app, streamName, red5Host, red5Port, useRed5ProSDK, useSDKPlayer]);
 
-  // Socket 연결 시 offer 재전송 (선택사항)
-  useEffect(() => {
-    // Socket이 연결되고 WebRTC가 아직 연결되지 않았으면 offer 재전송
-    if (socket?.connected && connectionState === 'disconnected' && machineId && peerConnectionRef.current) {
-      const pc = peerConnectionRef.current;
-      if (pc.localDescription) {
-        console.log('[WebRTC] Socket 연결됨, offer 재전송');
-        socket.emit('webrtc:offer', {
-          machineId,
-          sessionId,
-          offer: pc.localDescription,
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket?.connected, isConnected]);
 
   const getStatusText = () => {
     // 只显示"로딩 중..."（加载中），不显示其他状态
@@ -1502,8 +1485,18 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
     }
     
     return (
-      <div className="webrtc-player">
-        <div className="video-container" style={{ width: '100%', height: '100%', position: 'relative', backgroundColor: '#000', overflow: 'hidden' }}>
+      <div className="webrtc-player" style={{ 
+        width: '100%', 
+        height: '100%',
+        display: hidden ? 'none' : 'block' // hidden 为 true 时隐藏但保持连接
+      }}>
+        <div className="video-container" style={{ 
+          width: '100%', 
+          height: '100%', 
+          position: 'relative', 
+          backgroundColor: '#000', 
+          overflow: 'hidden'
+        }}>
           <iframe
             src={finalUrl}
             style={{
@@ -1524,10 +1517,11 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
               if (connectionTimeoutRef.current) {
                 clearTimeout(connectionTimeoutRef.current);
                 connectionTimeoutRef.current = null;
+                console.log('[WebRTC] ✅ iframe 로드 완료, 30초 타임아웃 클리어');
               }
               
               // iframe이 로드되었으므로 연결 성공으로 간주
-              setConnectionState('connected');
+              updateConnectionState('connected');
               setError(null);
               setDebugInfo('서버 웹페이지 로드 완료 - WebRTC 스트림이 재생 중입니다');
               
@@ -1577,7 +1571,11 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
   }
 
   return (
-    <div className="webrtc-player" style={{ width: '100%', height: '100%' }}>
+    <div className="webrtc-player" style={{ 
+      width: '100%', 
+      height: '100%',
+      display: hidden ? 'none' : 'block' // hidden 为 true 时隐藏但保持连接
+    }}>
       <div className="video-container" style={{ width: '100%', height: '100%' }}>
         <video
           id="red5pro-subscriber-video"
@@ -1624,7 +1622,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
             <div style={{ fontSize: '11px', color: '#999', marginTop: '10px' }}>
               <div>Machine ID: {machineId}</div>
               {sessionId && <div>Session ID: {sessionId}</div>}
-              <div>Socket: {socket ? (socket.connected ? '연결됨' : '연결 안됨') : '없음 (직접 연결 모드)'}</div>
+              <div>연결 모드: HTTP API (Red5 Pro SDK)</div>
             </div>
           </div>
         </div>

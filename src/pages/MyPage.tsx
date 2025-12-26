@@ -17,12 +17,12 @@ const MyPage: React.FC = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      // 从 localStorage 读取 userId
+      // localStorage에서 userId 읽기
       const savedUserId = localStorage.getItem('userId');
       
       if (!savedUserId) {
-        // 如果没有登录信息，跳转到登录页面
-        console.log('[MyPage] 未找到登录信息，跳转到登录页面');
+        // 로그인 정보가 없으면 로그인 페이지로 이동
+        console.log('[MyPage] 로그인 정보를 찾을 수 없습니다. 로그인 페이지로 이동합니다');
         navigate('/login');
         return;
       }
@@ -33,13 +33,13 @@ const MyPage: React.FC = () => {
       try {
         const backendApiUrl = import.meta.env.VITE_API_URL || '';
 
-        // 1. 调用用户信息 API 获取基本信息
+        // 1. 사용자 정보 API 호출하여 기본 정보 가져오기
         // GET /api/user/profile?userId=player_1
         const profileApiUrl = backendApiUrl 
           ? `${backendApiUrl}/api/user/profile?userId=${encodeURIComponent(savedUserId)}`
           : `/api/user/profile?userId=${encodeURIComponent(savedUserId)}`;
         
-        console.log('[MyPage] 调用用户信息 API:', profileApiUrl);
+        console.log('[MyPage] 사용자 정보 API 호출:', profileApiUrl);
         
         const profileResponse = await fetch(profileApiUrl, {
           method: 'GET',
@@ -50,7 +50,7 @@ const MyPage: React.FC = () => {
 
         if (!profileResponse.ok) {
           const errorText = await profileResponse.text();
-          let errorMessage = `获取用户信息失败 (${profileResponse.status})`;
+          let errorMessage = `사용자 정보 가져오기 실패 (${profileResponse.status})`;
           
           try {
             const errorData = JSON.parse(errorText);
@@ -63,41 +63,41 @@ const MyPage: React.FC = () => {
         }
 
         const userData = await profileResponse.json();
-        console.log('[MyPage] 用户信息 API 响应:', userData);
+        console.log('[MyPage] 사용자 정보 API 응답:', userData);
 
-        // 从 localStorage 读取 Google 头像（如果有）
+        // localStorage에서 Google 프로필 사진 읽기 (있는 경우)
         const savedAvatar = localStorage.getItem('userAvatar');
 
-        // 更新用户基本信息
+        // 사용자 기본 정보 업데이트
         setUserId(userData.userId || userData.id || savedUserId);
-        // 优先使用后端返回的 username
+        // 백엔드에서 반환된 username 우선 사용
         setUsername(userData.userName || userData.username || userData.name || '');
         setUserEmail(userData.email || userData.userEmail || '');
-        // 优先使用 localStorage 中的 Google 头像，如果没有则使用后端返回的头像
+        // localStorage의 Google 프로필 사진 우선 사용, 없으면 백엔드 반환 값 사용
         setUserAvatar(savedAvatar || userData.avatar || userData.picture || userData.userAvatar || null);
         
-        // 从 profile API 获取余额
+        // profile API에서 잔액 가져오기
         if (userData.balance !== undefined) {
           setBalance(userData.balance);
-          // 更新 localStorage 中的余额
+          // localStorage의 잔액 업데이트
           localStorage.setItem('balance', String(userData.balance));
         } else {
-          console.warn('[MyPage] Profile API 未返回 balance，使用默认值 0');
+          console.warn('[MyPage] Profile API가 balance를 반환하지 않았습니다. 기본값 0 사용');
           setBalance(0);
         }
         
-        // 从 profile API 获取免费票券
+        // profile API에서 무료 티켓 가져오기
         if (userData.free_tickets !== undefined) {
           setFreeTickets(userData.free_tickets);
         } else {
-          console.warn('[MyPage] Profile API 未返回 free_tickets，使用默认值 0');
+          console.warn('[MyPage] Profile API가 free_tickets를 반환하지 않았습니다. 기본값 0 사용');
           setFreeTickets(0);
         }
       } catch (err) {
-        console.error('[MyPage] 获取用户信息失败:', err);
-        setError(err instanceof Error ? err.message : '获取用户信息失败，请重试');
+        console.error('[MyPage] 사용자 정보 가져오기 실패:', err);
+        setError(err instanceof Error ? err.message : '사용자 정보 가져오기 실패, 다시 시도해주세요');
         
-        // 如果 API 调用失败，尝试从 localStorage 读取（作为 fallback）
+        // API 호출 실패 시 localStorage에서 읽기 시도 (fallback)
         const savedUsername = localStorage.getItem('username');
         const savedEmail = localStorage.getItem('userEmail');
         const savedBalance = localStorage.getItem('balance');
@@ -117,11 +117,11 @@ const MyPage: React.FC = () => {
   }, [navigate]);
 
   const handleLogout = () => {
-    // 确认登出
+    // 로그아웃 확인
     if (window.confirm('로그아웃 하시겠습니까?')) {
-      console.log('[MyPage] 用户登出');
+      console.log('[MyPage] 사용자 로그아웃');
       
-      // 清除 localStorage 中的用户信息
+      // localStorage의 사용자 정보 삭제
       localStorage.removeItem('userId');
       localStorage.removeItem('username');
       localStorage.removeItem('userEmail');
@@ -131,10 +131,10 @@ const MyPage: React.FC = () => {
       localStorage.removeItem('authToken');
       localStorage.removeItem('mockLogin');
       
-      // 断开 Socket 连接
+      // Socket 연결 해제
       disconnect();
       
-      // 跳转到首页
+      // 홈으로 이동
       navigate('/');
     }
   };
@@ -144,7 +144,7 @@ const MyPage: React.FC = () => {
   };
 
   if (isLoading) {
-    // 正在加载用户信息
+    // 사용자 정보 로딩 중
     return (
       <div className="my-page">
         <div className="loading-container">
@@ -155,7 +155,7 @@ const MyPage: React.FC = () => {
   }
 
   if (error && !userId) {
-    // 加载失败且没有用户信息
+    // 로딩 실패 및 사용자 정보 없음
     return (
       <div className="my-page">
         <div className="loading-container">
@@ -201,12 +201,12 @@ const MyPage: React.FC = () => {
             </svg>
           </button>
           <h1 className="my-page-title">My Page</h1>
-          <div style={{ width: '24px' }}></div> {/* 占位符，保持标题居中 */}
+          <div style={{ width: '24px' }}></div> {/* 플레이스홀더, 제목 중앙 정렬 유지 */}
         </div>
 
         {/* 콘텐츠 영역 */}
         <div className="my-page-content">
-          {/* 用户头像和信息 */}
+          {/* 사용자 프로필 사진 및 정보 */}
           <div className="my-page-profile-section">
             <div className="my-page-avatar-container">
               {userAvatar ? (
@@ -228,7 +228,7 @@ const MyPage: React.FC = () => {
             )}
           </div>
 
-          {/* 用户信息卡片 */}
+          {/* 사용자 정보 카드 */}
           <div className="my-page-info-card">
             <div className="my-page-info-item">
               <span className="my-page-info-label">User ID</span>
@@ -250,7 +250,7 @@ const MyPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 登出按钮 */}
+          {/* 로그아웃 버튼 */}
           <div className="my-page-actions">
             <button className="my-page-logout-button" onClick={handleLogout}>
               <span>Log out</span>

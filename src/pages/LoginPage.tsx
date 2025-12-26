@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
+// import { useGoogleLogin } from '@react-oauth/google'; // 현재 미사용, 수동 구현 사용
 import { useSocket } from '@/contexts/SocketContext';
 import './LoginPage.css';
 
@@ -10,22 +10,22 @@ const LoginPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { connect, isConnected } = useSocket();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasNavigatedRef = useRef(false); // 跳转 상태 추적
+  const hasNavigatedRef = useRef(false); // 이동 상태 추적
 
-  // 获取跳转目标参数
-  const redirectTarget = searchParams.get('redirect'); // 'game' 或 'mypage'
-  const machineId = searchParams.get('machineId'); // 目标机器 ID
+  // 이동 대상 파라미터 가져오기
+  const redirectTarget = searchParams.get('redirect'); // 'game' 또는 'mypage'
+  const machineId = searchParams.get('machineId'); // 대상 기계 ID
 
-  // 根据参数决定登录后跳转的目标
+  // 파라미터에 따라 로그인 후 이동할 대상 결정
   const getRedirectPath = (): string => {
-    // 优先读取 URL 参数
+    // URL 파라미터 우선 사용
     if (redirectTarget === 'game' && machineId) {
       return `/game/${machineId}`;
     } else if (redirectTarget === 'mypage') {
       return '/mypage';
     }
     
-    // 如果 URL 没有参数，尝试从 localStorage 读取（用于 OAuth 回调）
+    // URL에 파라미터가 없으면 localStorage에서 읽기 시도 (OAuth 콜백용)
     const savedRedirectTarget = localStorage.getItem('oauth_redirect_target');
     const savedMachineId = localStorage.getItem('oauth_redirect_machineId');
     
@@ -35,7 +35,7 @@ const LoginPage: React.FC = () => {
       return '/mypage';
     }
     
-    // 默认跳转到 My Page
+    // 기본값은 My Page로 이동
     return '/mypage';
   };
 
@@ -50,33 +50,33 @@ const LoginPage: React.FC = () => {
       hasNavigatedRef.current = true;
       setIsConnecting(false);
       const targetPath = getRedirectPath();
-      // 清除保存的 OAuth 跳转参数
+      // 저장된 OAuth 이동 파라미터 삭제
       localStorage.removeItem('oauth_redirect_target');
       localStorage.removeItem('oauth_redirect_machineId');
-      console.log('[Login] Socket 연결 성공, 跳转到:', targetPath);
+      console.log('[Login] Socket 연결 성공, 이동:', targetPath);
       navigate(targetPath);
     }
   }, [isConnected, isConnecting, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 컴포넌트 마운트 시 상태 초기화 및登录状态检查
+  // 컴포넌트 마운트 시 상태 초기화 및 로그인 상태 확인
   useEffect(() => {
     hasNavigatedRef.current = false;
     setIsConnecting(false);
     
-    // 检查是否有登录状态（localStorage）
+    // 로그인 상태 확인 (localStorage)
     const savedUserId = localStorage.getItem('userId');
     const authToken = localStorage.getItem('authToken');
     const mockLogin = localStorage.getItem('mockLogin') === 'true';
     
-    // 如果已登录，根据参数跳转
+    // 이미 로그인한 경우 파라미터에 따라 이동
     if (savedUserId && (authToken || mockLogin)) {
       const targetPath = getRedirectPath();
-      console.log('[LoginPage] 检测到登录状态，自动跳转到:', targetPath);
-      // 如果 Socket 未连接，先尝试连接
+      console.log('[LoginPage] 로그인 상태 감지, 자동 이동:', targetPath);
+      // Socket이 연결되지 않은 경우 연결 시도
       if (!isConnected) {
         connect(savedUserId);
       }
-      // 跳转到目标页面
+      // 대상 페이지로 이동
       navigate(targetPath);
     }
     
@@ -94,13 +94,13 @@ const LoginPage: React.FC = () => {
 
   // 모의 로그인 함수 (테스트용)
   const handleMockLogin = (provider: 'google' | 'kakao' | 'apple') => {
-    // 이미跳转중이면 무시
+    // 이미 이동 중이면 무시
     if (hasNavigatedRef.current) {
       return;
     }
     
     setIsConnecting(true);
-    hasNavigatedRef.current = false; // 跳转状态重置
+    hasNavigatedRef.current = false; // 이동 상태 초기화
     
     console.log(`[Mock Login] ${provider} 모의 로그인 시작`);
     
@@ -127,16 +127,17 @@ const LoginPage: React.FC = () => {
         hasNavigatedRef.current = true;
         setIsConnecting(false);
         const targetPath = getRedirectPath();
-        // 清除保存的 OAuth 跳转参数
+        // 저장된 OAuth 이동 파라미터 삭제
         localStorage.removeItem('oauth_redirect_target');
         localStorage.removeItem('oauth_redirect_machineId');
-        console.log('[Mock Login] 타임아웃, 跳转到:', targetPath);
+        console.log('[Mock Login] 타임아웃, 이동:', targetPath);
         navigate(targetPath);
       }
     }, 1000);
   };
 
-  // 실제 OAuth 로그인 함수 (백엔드 API 호출)
+  // 실제 OAuth 로그인 함수 (백엔드 API 호출) - 현재 미사용 (향후 확장용)
+  /*
   const handleRealOAuthLogin = async (provider: 'google' | 'kakao' | 'apple') => {
     setIsConnecting(true);
 
@@ -214,25 +215,27 @@ const LoginPage: React.FC = () => {
       alert(errorMessage);
     }
   };
+  */
 
-  // Google OAuth 登录处理
+  // Google OAuth 로그인 처리 (라이브러리 콜백용) - 현재 미사용, 수동 구현 사용
+  /*
   const handleGoogleLoginSuccess = async (tokenResponse: any) => {
     setIsConnecting(true);
     hasNavigatedRef.current = false;
 
-    // 保存跳转参数到 localStorage，以便后续使用
+    // localStorage에 이동 파라미터 저장 (이후 사용)
     if (redirectTarget) {
       localStorage.setItem('oauth_redirect_target', redirectTarget);
     }
     if (machineId) {
       localStorage.setItem('oauth_redirect_machineId', machineId);
     }
-    console.log('[Google OAuth] 保存跳转参数:', { redirectTarget, machineId });
+    console.log('[Google OAuth] 이동 파라미터 저장:', { redirectTarget, machineId });
 
     try {
-      console.log('[Google OAuth] 登录成功，获取用户信息...');
+      console.log('[Google OAuth] 로그인 성공, 사용자 정보 가져오기...');
       
-      // 使用 access_token 获取用户信息
+      // access_token을 사용하여 사용자 정보 가져오기
       const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: {
           Authorization: `Bearer ${tokenResponse.access_token}`,
@@ -240,23 +243,23 @@ const LoginPage: React.FC = () => {
       });
 
       if (!userInfoResponse.ok) {
-        throw new Error('获取用户信息失败');
+        throw new Error('사용자 정보 가져오기 실패');
       }
 
       const userInfo = await userInfoResponse.json();
-      console.log('[Google OAuth] Google 用户信息:', userInfo);
+      console.log('[Google OAuth] Google 사용자 정보:', userInfo);
 
-      // 构建 providerUserId (格式: google_{google_user_id})
+      // providerUserId 구성 (형식: google_{google_user_id})
       const providerUserId = `google_${userInfo.id}`;
       console.log('[Google OAuth] Provider User ID:', providerUserId);
 
-      // 调用后端 OAuth 登录 API
+      // 백엔드 OAuth 로그인 API 호출
       // POST /api/auth/google
       // Request Body: { "providerUserId": "google_12345" }
       const backendApiUrl = import.meta.env.VITE_API_URL || '';
       const apiUrl = backendApiUrl ? `${backendApiUrl}/api/auth/google` : '/api/auth/google';
       
-      console.log('[Google OAuth] 调用后端 API:', apiUrl);
+      console.log('[Google OAuth] 백엔드 API 호출:', apiUrl);
       
       const backendResponse = await fetch(apiUrl, {
         method: 'POST',
@@ -270,7 +273,7 @@ const LoginPage: React.FC = () => {
 
       if (!backendResponse.ok) {
         const errorText = await backendResponse.text();
-        let errorMessage = `后端登录失败 (${backendResponse.status})`;
+        let errorMessage = `백엔드 로그인 실패 (${backendResponse.status})`;
         
         try {
           const errorData = JSON.parse(errorText);
@@ -282,11 +285,11 @@ const LoginPage: React.FC = () => {
         throw new Error(errorMessage);
       }
 
-      // 解析后端返回的用户信息
+      // 백엔드에서 반환된 사용자 정보 파싱
       const backendData = await backendResponse.json();
-      console.log('[Google OAuth] 后端返回的用户信息:', backendData);
+      console.log('[Google OAuth] 백엔드에서 반환된 사용자 정보:', backendData);
 
-      // 使用后端返回的用户信息
+      // 백엔드에서 반환된 사용자 정보 사용
       const userId = backendData.userId || backendData.id;
       const username = backendData.username || userInfo.name || userInfo.email || 'Google User';
       const email = userInfo.email || '';
@@ -294,7 +297,7 @@ const LoginPage: React.FC = () => {
       const balance = backendData.balance || 0;
       const provider = backendData.provider || 'google';
 
-      // 保存用户信息到 localStorage
+      // localStorage에 사용자 정보 저장
       localStorage.setItem('userId', String(userId));
       localStorage.setItem('username', username);
       localStorage.setItem('userEmail', email);
@@ -304,67 +307,72 @@ const LoginPage: React.FC = () => {
         localStorage.setItem('userAvatar', picture);
       }
       localStorage.setItem('authToken', tokenResponse.access_token);
-      localStorage.removeItem('mockLogin'); // 移除模拟登录标记
+      localStorage.removeItem('mockLogin'); // 모의 로그인 표시 제거
 
-      // Socket 连接
+      // Socket 연결
       connect(String(userId));
 
-      // 设置超时：1秒后跳转到目标页面
+      // 타임아웃 설정: 1초 후 대상 페이지로 이동
       timeoutRef.current = setTimeout(() => {
         if (!hasNavigatedRef.current) {
           hasNavigatedRef.current = true;
           setIsConnecting(false);
           const targetPath = getRedirectPath();
-          // 清除保存的 OAuth 跳转参数
+          // 저장된 OAuth 이동 파라미터 삭제
           localStorage.removeItem('oauth_redirect_target');
           localStorage.removeItem('oauth_redirect_machineId');
-          console.log('[Google OAuth] 跳转到:', targetPath);
+          console.log('[Google OAuth] 이동:', targetPath);
           navigate(targetPath);
         }
       }, 1000);
 
     } catch (err) {
-      console.error('[Google OAuth] 登录处理错误:', err);
+      console.error('[Google OAuth] 로그인 처리 오류:', err);
       setIsConnecting(false);
-      alert('Google 登录失败，请重试');
+      alert('Google 로그인 실패, 다시 시도해주세요');
     }
   };
 
   const handleGoogleLoginError = () => {
-    console.error('[Google OAuth] 登录失败或取消');
+    console.error('[Google OAuth] 로그인 실패 또는 취소');
     setIsConnecting(false);
-    alert('Google 登录已取消');
+    alert('Google 로그인이 취소되었습니다');
   };
+  */
 
-  // Google OAuth Client ID 检查
+  // Google OAuth Client ID 확인
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
   const hasGoogleClientId = !!googleClientId && googleClientId !== 'dummy-client-id' && googleClientId.trim() !== '';
 
-  // 手动实现 Google OAuth 登录（根据环境自动选择 redirect_uri）
+  // Kakao OAuth REST API Key 확인
+  const kakaoRestApiKey = import.meta.env.VITE_KAKAO_REST_API_KEY || '';
+  const hasKakaoRestApiKey = !!kakaoRestApiKey && kakaoRestApiKey !== 'dummy-rest-api-key' && kakaoRestApiKey.trim() !== '';
+
+  // 수동으로 Google OAuth 로그인 구현 (환경에 따라 redirect_uri 자동 선택)
   const handleManualGoogleLogin = () => {
     if (!hasGoogleClientId) {
-      console.warn('[Login] Google Client ID 未配置，使用模拟登录');
+      console.warn('[Login] Google Client ID가 설정되지 않았습니다. 모의 로그인을 사용합니다');
       handleMockLogin('google');
       return;
     }
 
-    // 保存跳转参数到 localStorage，以便 OAuth 回调后使用
+    // localStorage에 이동 파라미터 저장 (OAuth 콜백 후 사용)
     if (redirectTarget) {
       localStorage.setItem('oauth_redirect_target', redirectTarget);
     }
     if (machineId) {
       localStorage.setItem('oauth_redirect_machineId', machineId);
     }
-    console.log('[Login] 保存 OAuth 跳转参数:', { redirectTarget, machineId });
+    console.log('[Login] OAuth 이동 파라미터 저장:', { redirectTarget, machineId });
 
-    // 获取 redirect_uri
+    // redirect_uri 가져오기
     const getRedirectUri = () => {
-      // 如果设置了环境变量，优先使用环境变量
+      // 환경 변수가 설정되어 있으면 환경 변수 우선 사용
       if (import.meta.env.VITE_GOOGLE_REDIRECT_URI) {
         return import.meta.env.VITE_GOOGLE_REDIRECT_URI;
       }
       
-      // 默认使用本地开发环境的重定向 URL（前端处理 OAuth 回调，然后调用后端 POST API）
+      // 기본값은 로컬 개발 환경의 리다이렉트 URL 사용 (프론트엔드에서 OAuth 콜백 처리 후 백엔드 POST API 호출)
       return 'http://localhost:3000/oauth/callback/google';
     };
 
@@ -372,19 +380,19 @@ const LoginPage: React.FC = () => {
     const scope = 'openid email profile';
     const responseType = 'token'; // implicit flow
     
-    // 详细的配置信息输出
-    console.log('%c========== Google OAuth 配置信息 ==========', 'color: blue; font-weight: bold; font-size: 14px;');
-    console.log('%c当前访问的 Origin:', 'color: green; font-weight: bold;', window.location.origin);
-    console.log('%c当前访问的 Hostname:', 'color: green; font-weight: bold;', window.location.hostname);
-    console.log('%c使用的 Redirect URI:', 'color: red; font-weight: bold; font-size: 16px;', redirectUri);
+    // 자세한 설정 정보 출력
+    console.log('%c========== Google OAuth 설정 정보 ==========', 'color: blue; font-weight: bold; font-size: 14px;');
+    console.log('%c현재 접속 중인 Origin:', 'color: green; font-weight: bold;', window.location.origin);
+    console.log('%c현재 접속 중인 Hostname:', 'color: green; font-weight: bold;', window.location.hostname);
+    console.log('%c사용 중인 Redirect URI:', 'color: red; font-weight: bold; font-size: 16px;', redirectUri);
     console.log('%c============================================', 'color: blue; font-weight: bold; font-size: 14px;');
     
-    // 重要提示：显示需要在 Google Cloud Console 中配置的 URI
-    console.warn('%c⚠️  重要：请在 Google Cloud Console 中配置以下 Redirect URI:', 'color: orange; font-weight: bold; font-size: 14px;');
+    // 중요 알림: Google Cloud Console에서 설정해야 하는 URI 표시
+    console.warn('%c⚠️  중요: Google Cloud Console에서 다음 Redirect URI를 설정해주세요:', 'color: orange; font-weight: bold; font-size: 14px;');
     console.warn('%c' + redirectUri, 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
-    console.log('%c配置路径：Google Cloud Console > API 和服务 > 凭据 > OAuth 2.0 客户端 ID > 已授权的重定向 URI', 'color: gray; font-style: italic;');
+    console.log('%c설정 경로: Google Cloud Console > API 및 서비스 > 사용자 인증 정보 > OAuth 2.0 클라이언트 ID > 승인된 리디렉션 URI', 'color: gray; font-style: italic;');
     
-    // 构建 Google OAuth URL
+    // Google OAuth URL 구성
     const encodedRedirectUri = encodeURIComponent(redirectUri);
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${encodeURIComponent(googleClientId)}&` +
@@ -392,61 +400,143 @@ const LoginPage: React.FC = () => {
       `response_type=${responseType}&` +
       `scope=${encodeURIComponent(scope)}&` +
       `include_granted_scopes=true&` +
-      `prompt=consent`; // 强制用户重新授权，即使浏览器中保持 Google 账户登录状态
+      `prompt=consent`; // 브라우저에 Google 계정이 로그인되어 있어도 사용자에게 재인증 강제
     
-    console.log('[Login] ========== OAuth URL 详细信息 ==========');
-    console.log('[Login] 原始 Redirect URI:', redirectUri);
-    console.log('[Login] 编码后的 Redirect URI:', encodedRedirectUri);
-    console.log('[Login] 当前访问的 Origin:', window.location.origin);
-    console.log('[Login] Redirect URI 是否匹配当前 Origin:', redirectUri.startsWith(window.location.origin));
-    console.log('[Login] 完整的 OAuth URL:', authUrl);
+    console.log('[Login] ========== OAuth URL 상세 정보 ==========');
+    console.log('[Login] 원본 Redirect URI:', redirectUri);
+    console.log('[Login] 인코딩된 Redirect URI:', encodedRedirectUri);
+    console.log('[Login] 현재 접속 중인 Origin:', window.location.origin);
+    console.log('[Login] Redirect URI가 현재 Origin과 일치:', redirectUri.startsWith(window.location.origin));
+    console.log('[Login] 전체 OAuth URL:', authUrl);
     console.log('[Login] ==========================================');
     
-    // 检查 CORS 问题
+    // CORS 문제 확인
     const redirectUriMatchesOrigin = redirectUri.startsWith(window.location.origin);
-    console.log('[Login] Redirect URI 是否匹配当前 Origin:', redirectUriMatchesOrigin);
+    console.log('[Login] Redirect URI가 현재 Origin과 일치:', redirectUriMatchesOrigin);
     
     if (!redirectUriMatchesOrigin) {
-      console.error('%c❌ CORS 错误：Redirect URI 与当前访问的域名不匹配！', 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
-      console.error('%c当前 Origin: ' + window.location.origin, 'color: red; font-weight: bold;');
+      console.error('%c❌ CORS 오류: Redirect URI가 현재 접속 중인 도메인과 일치하지 않습니다!', 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
+      console.error('%c현재 Origin: ' + window.location.origin, 'color: red; font-weight: bold;');
       console.error('%cRedirect URI: ' + redirectUri, 'color: red; font-weight: bold;');
-      console.error('%c这会导致 "Invalid CORS request" 错误！', 'color: red; font-weight: bold;');
-      console.error('%c解决方案：确保 redirect_uri 以当前 origin 开头', 'color: orange; font-weight: bold;');
+      console.error('%c이는 "Invalid CORS request" 오류를 발생시킬 수 있습니다!', 'color: red; font-weight: bold;');
+      console.error('%c해결 방법: redirect_uri가 현재 origin으로 시작하는지 확인', 'color: orange; font-weight: bold;');
     } else {
-      console.log('%c✅ Redirect URI 匹配当前 Origin，CORS 应该正常', 'color: green; font-weight: bold;');
+      console.log('%c✅ Redirect URI가 현재 Origin과 일치합니다. CORS가 정상 작동해야 합니다', 'color: green; font-weight: bold;');
     }
     
-    console.log('[Login] 打开 Google OAuth 登录页面');
+    console.log('[Login] Google OAuth 로그인 페이지 열기');
     
-    // 打开 OAuth 登录窗口
+    // OAuth 로그인 창 열기
     window.location.href = authUrl;
   };
 
-  // Google OAuth 登录配置（使用库的默认实现作为备选）
-  const googleLogin = useGoogleLogin({
-    onSuccess: handleGoogleLoginSuccess,
-    onError: handleGoogleLoginError,
-    flow: 'implicit', // 使用 implicit flow (纯前端，直接获取 access_token)
-    prompt: 'consent', // 强制用户重新授权，即使浏览器中保持 Google 账户登录状态
-  });
+  // Google OAuth 로그인 설정 (라이브러리의 기본 구현) - 현재 미사용, 수동 구현 사용
+  // const googleLogin = useGoogleLogin({
+  //   onSuccess: handleGoogleLoginSuccess,
+  //   onError: handleGoogleLoginError,
+  //   flow: 'implicit', // implicit flow 사용 (순수 프론트엔드, access_token 직접 가져오기)
+  //   prompt: 'consent', // 브라우저에 Google 계정이 로그인되어 있어도 사용자에게 재인증 강제
+  // });
 
-  // 社交登录处理函数
+  // Kakao OAuth 로그인 구현
+  const handleManualKakaoLogin = () => {
+    if (!hasKakaoRestApiKey) {
+      console.error('[Login] Kakao REST API Key가 설정되지 않았습니다.');
+      alert('Kakao 로그인을 사용하려면 환경 변수 VITE_KAKAO_REST_API_KEY를 설정해주세요.\n\n설정 방법:\n1. .env 파일 생성\n2. VITE_KAKAO_REST_API_KEY=your_key 추가\n3. 개발 서버 재시작');
+      return;
+    }
+
+    // localStorage에 이동 파라미터 저장 (OAuth 콜백 후 사용)
+    if (redirectTarget) {
+      localStorage.setItem('oauth_redirect_target', redirectTarget);
+    }
+    if (machineId) {
+      localStorage.setItem('oauth_redirect_machineId', machineId);
+    }
+    console.log('[Login] Kakao OAuth 이동 파라미터 저장:', { redirectTarget, machineId });
+
+    // redirect_uri 가져오기
+    const getKakaoRedirectUri = () => {
+      // 환경 변수가 설정되어 있으면 환경 변수 우선 사용
+      if (import.meta.env.VITE_KAKAO_REDIRECT_URI) {
+        return import.meta.env.VITE_KAKAO_REDIRECT_URI;
+      }
+      
+      // 기본값은 현재 origin + 콜백 경로
+      return `${window.location.origin}/oauth/callback/kakao`;
+    };
+
+    const redirectUri = getKakaoRedirectUri();
+    const responseType = 'code'; // Authorization Code Flow
+    
+    // 자세한 설정 정보 출력
+    console.log('%c========== Kakao OAuth 설정 정보 ==========', 'color: blue; font-weight: bold; font-size: 14px;');
+    console.log('%c현재 접속 중인 Origin:', 'color: green; font-weight: bold;', window.location.origin);
+    console.log('%c현재 접속 중인 Hostname:', 'color: green; font-weight: bold;', window.location.hostname);
+    console.log('%c사용 중인 Redirect URI:', 'color: red; font-weight: bold; font-size: 16px;', redirectUri);
+    console.log('%c사용 중인 REST API Key:', 'color: orange; font-weight: bold;', kakaoRestApiKey.substring(0, 10) + '...');
+    console.log('%c============================================', 'color: blue; font-weight: bold; font-size: 14px;');
+    
+    // 중요 알림: Kakao Developers에서 설정해야 하는 URI 표시
+    console.warn('%c⚠️  중요: Kakao Developers에서 다음 Redirect URI를 설정해주세요:', 'color: orange; font-weight: bold; font-size: 14px;');
+    console.warn('%c' + redirectUri, 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
+    console.log('%c설정 경로: Kakao Developers > 내 애플리케이션 > 제품 설정 > 카카오 로그인 > Redirect URI', 'color: gray; font-style: italic;');
+    
+    // Kakao OAuth URL 구성
+    const encodedRedirectUri = encodeURIComponent(redirectUri);
+    const authUrl = `https://kauth.kakao.com/oauth/authorize?` +
+      `client_id=${encodeURIComponent(kakaoRestApiKey)}&` +
+      `redirect_uri=${encodedRedirectUri}&` +
+      `response_type=${responseType}`;
+    
+    console.log('[Login] ========== Kakao OAuth URL 상세 정보 ==========');
+    console.log('[Login] 원본 Redirect URI:', redirectUri);
+    console.log('[Login] 인코딩된 Redirect URI:', encodedRedirectUri);
+    console.log('[Login] 현재 접속 중인 Origin:', window.location.origin);
+    console.log('[Login] Redirect URI가 현재 Origin과 일치:', redirectUri.startsWith(window.location.origin));
+    console.log('[Login] 전체 OAuth URL:', authUrl);
+    console.log('[Login] ==========================================');
+    
+    // CORS 문제 확인
+    const redirectUriMatchesOrigin = redirectUri.startsWith(window.location.origin);
+    console.log('[Login] Redirect URI가 현재 Origin과 일치:', redirectUriMatchesOrigin);
+    
+    if (!redirectUriMatchesOrigin) {
+      console.error('%c❌ CORS 오류: Redirect URI가 현재 접속 중인 도메인과 일치하지 않습니다!', 'color: red; font-weight: bold; font-size: 16px; background: yellow; padding: 5px;');
+      console.error('%c현재 Origin: ' + window.location.origin, 'color: red; font-weight: bold;');
+      console.error('%cRedirect URI: ' + redirectUri, 'color: red; font-weight: bold;');
+      console.error('%c해결 방법: redirect_uri가 현재 origin으로 시작하는지 확인', 'color: orange; font-weight: bold;');
+    } else {
+      console.log('%c✅ Redirect URI가 현재 Origin과 일치합니다. 정상 작동해야 합니다', 'color: green; font-weight: bold;');
+    }
+    
+    console.log('[Login] Kakao OAuth 로그인 페이지 열기');
+    
+    // OAuth 로그인 창 열기
+    window.location.href = authUrl;
+  };
+
+  // 소셜 로그인 처리 함수
   const handleSocialLogin = (provider: 'google' | 'kakao' | 'apple') => {
     if (provider === 'google') {
-      // Google 使用真实的 OAuth 登录（如果配置了 clientId）
+      // Google은 실제 OAuth 로그인 사용 (clientId가 설정되어 있는 경우)
       if (hasGoogleClientId) {
-        console.log('[Login] Google OAuth 登录开始，使用 redirect_uri: https://app.supercontrol.com/oauth/callback/google');
-        // 使用手动实现的 OAuth 登录以支持自定义 redirect_uri
+        console.log('[Login] Google OAuth 로그인 시작, redirect_uri 사용: https://app.supercontrol.com/oauth/callback/google');
+        // 사용자 정의 redirect_uri를 지원하도록 수동으로 구현한 OAuth 로그인 사용
         handleManualGoogleLogin();
       } else {
-        // 如果没有配置 clientId，使用模拟登录
-        console.warn('[Login] Google Client ID 未配置，使用模拟登录');
+        // clientId가 설정되지 않은 경우 모의 로그인 사용
+        console.warn('[Login] Google Client ID가 설정되지 않았습니다. 모의 로그인을 사용합니다');
         handleMockLogin('google');
       }
+    } else if (provider === 'kakao') {
+      // Kakao는 실제 OAuth 로그인만 사용
+      console.log('[Login] Kakao OAuth 로그인 시작');
+      handleManualKakaoLogin();
     } else {
-      // Kakao 和 Apple 暂时使用模拟登录
+      // Apple은 일단 모의 로그인 사용
       handleMockLogin(provider);
-      // 实际 API 使用时可取消注释
+      // 실제 API 사용 시 주석 해제
       // handleRealOAuthLogin(provider);
     }
   };
@@ -483,13 +573,13 @@ const LoginPage: React.FC = () => {
             className="social-button social-button-google"
             onClick={() => handleSocialLogin('google')}
             disabled={isConnecting}
-            title={hasGoogleClientId ? '使用 Google OAuth 登录' : 'Google Client ID 未配置，将使用模拟登录'}
+            title={hasGoogleClientId ? 'Google OAuth를 사용하여 로그인' : 'Google Client ID가 설정되지 않았습니다. 모의 로그인을 사용합니다'}
           >
             <span className="google-icon">G</span>
             <span>Continue with Google</span>
             {!hasGoogleClientId && (
               <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '8px' }}>
-                (模拟)
+                (모의)
               </span>
             )}
           </button>
@@ -497,14 +587,22 @@ const LoginPage: React.FC = () => {
           <button
             className="social-button social-button-kakao"
             onClick={() => handleSocialLogin('kakao')}
-            disabled={isConnecting}
+            disabled={isConnecting || !hasKakaoRestApiKey}
+            title={hasKakaoRestApiKey ? 'Kakao OAuth를 사용하여 로그인' : 'Kakao REST API Key가 설정되지 않았습니다. 환경 변수를 설정해주세요.'}
           >
             <svg className="social-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
             <span>Continue with Kakao</span>
+            {!hasKakaoRestApiKey && (
+              <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '8px', color: '#ff6b6b' }}>
+                (미설정)
+              </span>
+            )}
           </button>
 
+          {/* Apple 登录按钮 - 暂时隐藏，取消注释即可恢复 */}
+          {false && (
           <button
             className="social-button social-button-apple"
             onClick={() => handleSocialLogin('apple')}
@@ -515,6 +613,7 @@ const LoginPage: React.FC = () => {
             </svg>
             <span>Continue with Apple</span>
           </button>
+          )}
           
         </div>
 

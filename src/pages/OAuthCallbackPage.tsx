@@ -6,76 +6,76 @@ import './OAuthCallbackPage.css';
 const OAuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
   const { connect } = useSocket();
-  const hasProcessedRef = useRef(false); // 防重复执行的标志
+  const hasProcessedRef = useRef(false); // 중복 실행 방지 플래그
 
   useEffect(() => {
-    // 如果已经处理过，直接返回（防止 React StrictMode 和重复执行）
+    // 이미 처리된 경우 즉시 반환 (React StrictMode 및 중복 실행 방지)
     if (hasProcessedRef.current) {
-      console.log('[OAuth Callback] 已经处理过回调，跳过重复执行');
+      console.log('[OAuth Callback] 이미 콜백 처리 완료, 중복 실행 건너뛰기');
       return;
     }
 
     const handleOAuthCallback = async () => {
       try {
-        // 立即设置标志，防止重复执行
+        // 즉시 플래그 설정하여 중복 실행 방지
         hasProcessedRef.current = true;
         
-        console.log('[OAuth Callback] 开始处理回调...');
-        console.log('[OAuth Callback] 当前 URL:', window.location.href);
+        console.log('[OAuth Callback] 콜백 처리 시작...');
+        console.log('[OAuth Callback] 현재 URL:', window.location.href);
         console.log('[OAuth Callback] URL Hash:', window.location.hash);
         console.log('[OAuth Callback] URL Search:', window.location.search);
         
-        // Implicit flow: access_token 在 URL hash (#) 中，而不是 query string (?)
-        // 需要从 hash 中解析参数
+        // Implicit flow: access_token은 URL hash (#)에 있으며 query string (?)이 아닙니다
+        // hash에서 파라미터 파싱 필요
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const queryParams = new URLSearchParams(window.location.search);
         
-        // 优先从 hash 中获取（implicit flow），如果没有则从 query string 获取
+        // hash에서 우선 가져오기 (implicit flow), 없으면 query string에서 가져오기
         const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
         const error = hashParams.get('error') || queryParams.get('error');
         const code = hashParams.get('code') || queryParams.get('code');
         
-        console.log('[OAuth Callback] 解析的参数:', { accessToken: accessToken ? '已找到' : '未找到', error, code: code ? '已找到' : '未找到' });
+        console.log('[OAuth Callback] 파싱된 파라미터:', { accessToken: accessToken ? '찾음' : '없음', error, code: code ? '찾음' : '없음' });
 
         if (error) {
-          console.error('[OAuth Callback] Google 返回错误:', error);
+          console.error('[OAuth Callback] Google에서 오류 반환:', error);
           const errorDescription = hashParams.get('error_description') || queryParams.get('error_description') || '';
-          // 错误时重置标志，允许重试
+          // 오류 시 플래그 초기화하여 재시도 허용
           hasProcessedRef.current = false;
-          alert(`Google 登录失败: ${error}${errorDescription ? '\n' + errorDescription : ''}`);
+          alert(`Google 로그인 실패: ${error}${errorDescription ? '\n' + errorDescription : ''}`);
           navigate('/login');
           return;
         }
 
         if (accessToken) {
-          // Implicit flow: 直接有 access_token
-          console.log('[OAuth Callback] ✅ 收到 access_token');
+          // Implicit flow: access_token 직접 보유
+          console.log('[OAuth Callback] ✅ access_token 받음');
           await handleGoogleLoginSuccess(accessToken);
         } else if (code) {
-          // Authorization code flow: 需要交换 token
-          console.log('[OAuth Callback] 收到 authorization code');
-          // 错误时重置标志，允许重试
+          // Authorization code flow: 토큰 교환 필요
+          console.log('[OAuth Callback] authorization code 받음');
+          // 오류 시 플래그 초기화하여 재시도 허용
           hasProcessedRef.current = false;
-          alert('Authorization code flow 暂未实现，请使用 implicit flow');
+          alert('Authorization code flow 아직 구현되지 않음, implicit flow를 사용하세요');
           navigate('/login');
         } else {
-          console.error('[OAuth Callback] ❌ 未找到 token 或 code');
-          console.error('[OAuth Callback] Hash 参数:', Object.fromEntries(hashParams));
-          console.error('[OAuth Callback] Query 参数:', Object.fromEntries(queryParams));
-          // 错误时重置标志，允许重试
+          console.error('[OAuth Callback] ❌ token 또는 code를 찾을 수 없음');
+          console.error('[OAuth Callback] Hash 파라미터:', Object.fromEntries(hashParams));
+          console.error('[OAuth Callback] Query 파라미터:', Object.fromEntries(queryParams));
+          // 오류 시 플래그 초기화하여 재시도 허용
           hasProcessedRef.current = false;
-          alert('OAuth 回调参数无效，请检查 URL 是否正确');
+          alert('OAuth 콜백 파라미터가 유효하지 않습니다. URL을 확인하세요');
           navigate('/login');
         }
       } catch (err) {
-        // 错误时重置标志，允许重试
+        // 오류 시 플래그 초기화하여 재시도 허용
         hasProcessedRef.current = false;
-        console.error('[OAuth Callback] ❌ 处理错误:', err);
+        console.error('[OAuth Callback] ❌ 처리 오류:', err);
         if (err instanceof Error) {
-          console.error('[OAuth Callback] 错误详情:', err.message, err.stack);
-          alert(`登录处理失败: ${err.message}`);
+          console.error('[OAuth Callback] 오류 상세:', err.message, err.stack);
+          alert(`로그인 처리 실패: ${err.message}`);
         } else {
-          alert('登录处理失败，请重试');
+          alert('로그인 처리 실패, 다시 시도하세요');
         }
         navigate('/login');
       }
@@ -83,47 +83,47 @@ const OAuthCallbackPage: React.FC = () => {
 
     handleOAuthCallback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 只在组件挂载时执行一次，移除 searchParams 和 navigate 依赖
+  }, []); // 컴포넌트 마운트 시 한 번만 실행, searchParams 및 navigate 의존성 제거
 
   const handleGoogleLoginSuccess = async (accessToken: string) => {
     try {
-      console.log('[OAuth Callback] 开始获取用户信息...');
+      console.log('[OAuth Callback] 사용자 정보 가져오기 시작...');
       console.log('[OAuth Callback] Access Token:', accessToken.substring(0, 20) + '...');
       
-      // 使用 Vite 代理调用 Google API（避免 CORS 问题）
-      console.log('[OAuth Callback] 通过代理调用 Google API 获取用户信息...');
+      // Vite 프록시를 사용하여 Google API 호출 (CORS 문제 방지)
+      console.log('[OAuth Callback] 프록시를 통해 Google API에서 사용자 정보 가져오기...');
       let userInfoResponse;
       try {
-        // 使用本地代理路径，Vite 会转发到 Google API
+        // 로컬 프록시 경로 사용, Vite가 Google API로 전달
         userInfoResponse = await fetch('/google-api/oauth2/v2/userinfo', {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
         });
-        console.log('[OAuth Callback] Google API 响应状态:', userInfoResponse.status);
+        console.log('[OAuth Callback] Google API 응답 상태:', userInfoResponse.status);
       } catch (fetchError) {
-        console.error('[OAuth Callback] Google API 请求失败:', fetchError);
-        // 改进错误处理：检查是否是网络错误或 CORS 错误
+        console.error('[OAuth Callback] Google API 요청 실패:', fetchError);
+        // 오류 처리 개선: 네트워크 오류 또는 CORS 오류 확인
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
-          throw new Error('网络连接失败，请检查网络连接或尝试刷新页面');
+          throw new Error('네트워크 연결 실패, 네트워크 연결을 확인하거나 페이지를 새로고침하세요');
         }
         if (fetchError instanceof Error && (fetchError.message.includes('CORS') || fetchError.message.includes('cors'))) {
-          throw new Error('获取用户信息时发生 CORS 错误，请检查网络连接');
+          throw new Error('사용자 정보 가져오기 시 CORS 오류 발생, 네트워크 연결을 확인하세요');
         }
         throw fetchError;
       }
 
       if (!userInfoResponse.ok) {
         const errorText = await userInfoResponse.text();
-        console.error('[OAuth Callback] Google API 错误响应:', errorText);
+        console.error('[OAuth Callback] Google API 오류 응답:', errorText);
         
-        // 检查是否是 "Invalid CORS request" 错误
+        // "Invalid CORS request" 오류 확인
         if (errorText.includes('Invalid CORS request') || errorText.includes('CORS')) {
-          throw new Error('Invalid CORS request: 请检查 Google Cloud Console 中的 "Authorized JavaScript origins" 配置，确保包含当前域名');
+          throw new Error('Invalid CORS request: Google Cloud Console의 "Authorized JavaScript origins" 설정을 확인하여 현재 도메인이 포함되어 있는지 확인하세요');
         }
         
-        // 尝试解析 JSON 错误响应
-        let errorMessage = `获取用户信息失败 (${userInfoResponse.status})`;
+        // JSON 오류 응답 파싱 시도
+        let errorMessage = `사용자 정보 가져오기 실패 (${userInfoResponse.status})`;
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.error?.message || errorData.error_description || errorMessage;
@@ -135,26 +135,26 @@ const OAuthCallbackPage: React.FC = () => {
       }
 
       const userInfo = await userInfoResponse.json();
-      console.log('[OAuth Callback] Google 用户信息:', userInfo);
+      console.log('[OAuth Callback] Google 사용자 정보:', userInfo);
 
-      // 构建 providerUserId (格式: google_{google_user_id})
+      // providerUserId 구성 (형식: google_{google_user_id})
       const providerUserId = `google_${userInfo.id}`;
       console.log('[OAuth Callback] Provider User ID:', providerUserId);
 
-      // 提取 username（Google Name）和头像
+      // username (Google Name) 및 프로필 사진 추출
       const googleName = userInfo.name || userInfo.email || 'Google User';
       const googlePicture = userInfo.picture || '';
       console.log('[OAuth Callback] Google Name:', googleName);
       console.log('[OAuth Callback] Google Picture:', googlePicture);
 
-      // 调用后端 OAuth 登录 API
+      // 백엔드 OAuth 로그인 API 호출
       // POST /api/auth/google
       // Request Body: { "providerUserId": "google_12345", "username": "John Doe" }
       const backendApiUrl = import.meta.env.VITE_API_URL || '';
       const apiUrl = backendApiUrl ? `${backendApiUrl}/api/auth/google` : '/api/auth/google';
       
-      console.log('[OAuth Callback] 调用后端 API:', apiUrl);
-      console.log('[OAuth Callback] 请求体:', { providerUserId, username: googleName });
+      console.log('[OAuth Callback] 백엔드 API 호출:', apiUrl);
+      console.log('[OAuth Callback] 요청 본문:', { providerUserId, username: googleName });
       
       let backendResponse;
       try {
@@ -168,28 +168,28 @@ const OAuthCallbackPage: React.FC = () => {
             username: googleName,
           }),
         });
-        console.log('[OAuth Callback] 后端 API 响应状态:', backendResponse.status);
+        console.log('[OAuth Callback] 백엔드 API 응답 상태:', backendResponse.status);
       } catch (fetchError) {
-        console.error('[OAuth Callback] 后端 API 请求失败:', fetchError);
-        // 改进错误处理
+        console.error('[OAuth Callback] 백엔드 API 요청 실패:', fetchError);
+        // 오류 처리 개선
         if (fetchError instanceof TypeError && fetchError.message.includes('Failed to fetch')) {
-          throw new Error('网络连接失败，无法连接到后端服务器，请检查网络连接');
+          throw new Error('네트워크 연결 실패, 백엔드 서버에 연결할 수 없습니다. 네트워크 연결을 확인하세요');
         }
         if (fetchError instanceof Error && (fetchError.message.includes('CORS') || fetchError.message.includes('cors'))) {
-          throw new Error('调用后端 API 时发生 CORS 错误，请检查后端 CORS 配置');
+          throw new Error('백엔드 API 호출 시 CORS 오류 발생, 백엔드 CORS 설정을 확인하세요');
         }
         throw fetchError;
       }
 
       if (!backendResponse.ok) {
         const errorText = await backendResponse.text();
-        console.error('[OAuth Callback] 后端 API 错误响应:', errorText);
-        let errorMessage = `后端登录失败 (${backendResponse.status})`;
+        console.error('[OAuth Callback] 백엔드 API 오류 응답:', errorText);
+        let errorMessage = `백엔드 로그인 실패 (${backendResponse.status})`;
         
         try {
           const errorData = JSON.parse(errorText);
           errorMessage = errorData.message || errorData.error || errorMessage;
-          console.error('[OAuth Callback] 后端错误详情:', errorData);
+          console.error('[OAuth Callback] 백엔드 오류 상세:', errorData);
         } catch {
           errorMessage = errorText || errorMessage;
         }
@@ -197,75 +197,75 @@ const OAuthCallbackPage: React.FC = () => {
         throw new Error(errorMessage);
       }
 
-      // 解析后端返回的用户信息
+      // 백엔드에서 반환된 사용자 정보 파싱
       const backendData = await backendResponse.json();
-      console.log('[OAuth Callback] 后端返回的用户信息:', backendData);
+      console.log('[OAuth Callback] 백엔드에서 반환된 사용자 정보:', backendData);
 
-      // 使用后端返回的用户信息
+      // 백엔드에서 반환된 사용자 정보 사용
       const userId = backendData.userId || backendData.id;
-      // 优先使用后端返回的 username，如果没有则使用 Google Name
+      // 백엔드에서 반환된 username 우선 사용, 없으면 Google Name 사용
       const username = backendData.username || googleName;
       const email = userInfo.email || '';
       const balance = backendData.balance || 0;
       const provider = backendData.provider || 'google';
 
-      // 保存用户信息到 localStorage
+      // localStorage에 사용자 정보 저장
       localStorage.setItem('userId', String(userId));
       localStorage.setItem('username', username);
       localStorage.setItem('userEmail', email);
       localStorage.setItem('balance', String(balance));
       localStorage.setItem('provider', provider);
-      // 保存 Google 头像
+      // Google 프로필 사진 저장
       if (googlePicture) {
         localStorage.setItem('userAvatar', googlePicture);
       }
       localStorage.setItem('authToken', accessToken);
-      localStorage.removeItem('mockLogin'); // 移除模拟登录标记
+      localStorage.removeItem('mockLogin'); // 모의 로그인 표시 제거
 
-      // Socket 连接
+      // Socket 연결
       connect(String(userId));
 
-      // 读取保存的跳转参数
+      // 저장된 이동 파라미터 읽기
       const savedRedirectTarget = localStorage.getItem('oauth_redirect_target');
       const savedMachineId = localStorage.getItem('oauth_redirect_machineId');
       
-      // 清除保存的参数
+      // 저장된 파라미터 삭제
       localStorage.removeItem('oauth_redirect_target');
       localStorage.removeItem('oauth_redirect_machineId');
 
-      // 根据保存的参数决定跳转目标
-      let targetPath = '/mypage'; // 默认跳转到 My Page
+      // 저장된 파라미터에 따라 이동 대상 결정
+      let targetPath = '/mypage'; // 기본값은 My Page로 이동
       if (savedRedirectTarget === 'game' && savedMachineId) {
         targetPath = `/game/${savedMachineId}`;
       } else if (savedRedirectTarget === 'mypage') {
         targetPath = '/mypage';
       }
 
-      // 跳转到目标页面
-      console.log('[OAuth Callback] 跳转到:', targetPath);
+      // 대상 페이지로 이동
+      console.log('[OAuth Callback] 이동:', targetPath);
       navigate(targetPath);
     } catch (err) {
-      console.error('[OAuth Callback] ❌ 登录处理错误:', err);
+      console.error('[OAuth Callback] ❌ 로그인 처리 오류:', err);
       if (err instanceof Error) {
-        console.error('[OAuth Callback] 错误详情:', err.message);
-        console.error('[OAuth Callback] 错误堆栈:', err.stack);
+        console.error('[OAuth Callback] 오류 상세:', err.message);
+        console.error('[OAuth Callback] 오류 스택:', err.stack);
         
-        // 改进错误消息显示
+        // 오류 메시지 표시 개선
         let errorMessage = err.message;
         if (err.message.includes('Invalid CORS request')) {
-          errorMessage = 'Invalid CORS request: 请检查 Google Cloud Console 配置\n\n' +
-            '1. 打开 Google Cloud Console (https://console.cloud.google.com)\n' +
-            '2. 进入 "APIs & Services" > "Credentials"\n' +
-            '3. 找到您的 OAuth 2.0 Client ID\n' +
-            '4. 在 "Authorized JavaScript origins" 中添加: http://localhost:3000\n' +
-            '5. 在 "Authorized redirect URIs" 中添加: http://localhost:3000/oauth/callback/google\n' +
-            '6. 保存更改后等待几分钟生效';
+          errorMessage = 'Invalid CORS request: Google Cloud Console 설정을 확인하세요\n\n' +
+            '1. Google Cloud Console (https://console.cloud.google.com) 열기\n' +
+            '2. "APIs & Services" > "Credentials"로 이동\n' +
+            '3. OAuth 2.0 Client ID 찾기\n' +
+            '4. "Authorized JavaScript origins"에 추가: http://localhost:3000\n' +
+            '5. "Authorized redirect URIs"에 추가: http://localhost:3000/oauth/callback/google\n' +
+            '6. 변경사항 저장 후 몇 분 기다리기';
         }
         
-        alert(`Google 登录失败: ${errorMessage}`);
+        alert(`Google 로그인 실패: ${errorMessage}`);
       } else {
-        console.error('[OAuth Callback] 未知错误:', err);
-        alert('Google 登录失败，请重试');
+        console.error('[OAuth Callback] 알 수 없는 오류:', err);
+        alert('Google 로그인 실패, 다시 시도하세요');
       }
       navigate('/login');
     }

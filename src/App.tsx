@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import GamePage from './pages/GamePage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
+import KakaoOAuthCallbackPage from './pages/KakaoOAuthCallbackPage';
 import MyPage from './pages/MyPage';
 import './App.css';
 
@@ -28,6 +29,7 @@ const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/oauth/callback/google" element={<OAuthCallbackPage />} />
+            <Route path="/oauth/callback/kakao" element={<KakaoOAuthCallbackPage />} />
             <Route path="/game/:machineId" element={<GamePage />} />
             <Route path="/mypage" element={<MyPage />} />
           </Routes>

@@ -1,73 +1,124 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useSocket } from '@/contexts/SocketContext';
-import { SessionStatus } from '@/types/session';
 import GameVideo from '@/components/GameVideo';
 import WebRTCPlayer from '@/components/WebRTCPlayer';
+import { startGame, checkReservedStatus, endGame, enterGame, sendHeartbeat } from '@/services/gameApi';
 import './GamePage.css';
 
 const GamePage: React.FC = () => {
   const { machineId } = useParams<{ machineId: string }>();
-  // 从 localStorage 读取游戏主题和标题
+  // localStorage에서 게임 테마 및 제목 읽기
   const [gameTheme, setGameTheme] = useState<string>(() => {
     const savedTheme = localStorage.getItem(`game_theme_${machineId}`);
     return savedTheme || 'default';
   });
   const [gameTitle, setGameTitle] = useState<string>(() => {
     const savedTitle = localStorage.getItem(`game_title_${machineId}`);
-    return savedTitle || '블랙핑크 굿즈 뽑기'; // 默认标题
+    return savedTitle || '블랙핑크 굿즈 뽑기'; // 기본 제목
   });
   
-  // Red5 스트림 설정 (RTMP -> HLS)
-  // RTMP: rtmp://192.168.45.48:1935/live/mystream
-  // HLS: http://192.168.45.48:5080/live/mystream/playlist.m3u8
-  const red5Host = '192.168.45.48'; // Red5 HTTP 호스트 (HLS 접근용)
-  const red5Port = 5080; // Red5 HTTP 포트 (HLS)
-  const streamName = 'mystream'; // OBS에서 푸시한 스트림 이름 (RTMP: rtmp://192.168.45.48:1935/live/mystream)
+  // Red5 Pro 配置 - 从环境变量读取
+  const red5Host = import.meta.env.VITE_RED5PRO_HOST || 'localhost';
+  const red5Port = parseInt(import.meta.env.VITE_RED5PRO_HTTP_PORT || '5080', 10); // HLS/HTTP 端口
+  // 以下配置为未来功能预留
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const red5WebRTCPort = parseInt(import.meta.env.VITE_RED5PRO_WEBRTC_PORT || '8081', 10); // WebRTC 端口
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const red5App = import.meta.env.VITE_RED5PRO_APP || 'live';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const red5Protocol = import.meta.env.VITE_RED5PRO_PROTOCOL || 'http';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const red5WSProtocol = import.meta.env.VITE_RED5PRO_WS_PROTOCOL || 'ws';
+  const streamName = 'mystream'; // OBS에서 푸시한 스트림 이름
   
-  // Red5 Pro SDK 许可证密钥 (如果需要)
-  // 如果使用商业版 Red5 Pro SDK，请在此处设置许可证密钥
-  // 可以从环境变量读取: const licenseKey = import.meta.env.VITE_RED5PRO_LICENSE_KEY;
-  // 如果服务器端 viewer.jsp 可以播放，可能不需要客户端许可证密钥
-  const licenseKey = '6G7F-FH9J-3D7M-1QP2';
+  // Red5 Pro SDK 라이선스 키 - 从环境变量读取
+  const licenseKey = import.meta.env.VITE_RED5PRO_LICENSE_KEY || undefined;
   const navigate = useNavigate();
-  const {
-    isConnected,
-    session,
-    socket,
-    connect,
-    createSession,
-    leaveSession,
-    moveClaw,
-    dropClaw,
-    grabClaw,
-  } = useSocket();
   const [userId] = useState(() => {
     return localStorage.getItem('userId') || 'user-001';
   });
-  // 检查是否是模拟登录
+  // 모의 로그인 여부 확인
   const [isMockLogin] = useState(() => {
     return localStorage.getItem('mockLogin') === 'true';
   });
   const [currentTime, setCurrentTime] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'chat' | 'prize'>('chat');
   const [viewers, setViewers] = useState(25);
-  const [remainingTime, setRemainingTime] = useState(30);
+  const [remainingTime, setRemainingTime] = useState(45);
   const [myCoins, setMyCoins] = useState(() => {
-    // 从 localStorage 读取余额，如果没有则使用默认值
+    // localStorage에서 잔액 읽기, 없으면 기본값 사용
     const balance = localStorage.getItem('balance');
-    return balance ? parseInt(balance, 10) : 200;
+    const coins = balance ? parseInt(balance, 10) : 200;
+    // 如果余额为0或无效，设置为200（测试用）
+    return coins > 0 ? coins : 200;
   });
   const [gameStarted, setGameStarted] = useState(false);
   const [gameSuccess, setGameSuccess] = useState(false);
   const [useWebRTC, setUseWebRTC] = useState(false); // WebRTC 사용 여부 (기본값: false, HLS 사용)
   const [isStartingGame, setIsStartingGame] = useState(false); // 게임 시작 중 상태
   
+  // WebRTC 상태
+  const [webrtcReady, setWebrtcReady] = useState(false); // WebRTC 是否准备好
+  
+  // 대기열 관리 상태 (새로운 API 형식에 맞춰 수정)
+  const [position, setPosition] = useState<number | null>(null); // 대기 순서 (null이면 대기열에 없음)
+  const [queueState, setQueueState] = useState<'waiting' | 'ready' | 'playing' | null>(null); // 대기열 상태
+  const [canStart, setCanStart] = useState(false); // 게임 시작 가능 여부
+  const [startToken, setStartToken] = useState<string | null>(null); // 게임 시작 토큰
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null); // 폴링 타이머
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null); // 하트비트 타이머
+  const gameTimerRef = useRef<NodeJS.Timeout | null>(null); // 게임 타이머 (倒计时定时器)
+  const isEndingGameRef = useRef<boolean>(false); // 게임 종료 중 플래그 (동기 플래그, 중복 호출 방지용)
+  const gameStartTimeRef = useRef<number>(0); // 游戏开始时间戳（用于调试 30 秒问题）
+  const [sessionId, setSessionId] = useState<string | null>(null); // 게임 세션 ID
+  
+  // 하위 호환성을 위한 계산된 값
+  const isReserved = position !== null && queueState === 'waiting'; // 대기 중인지 여부
+  const reservedNumber = position ?? 0; // UI 표시용 (null이면 0)
+  
   // WebRTC 실패 시 HLS로 전환하는 콜백
   const handleWebRTCFallback = () => {
     console.log('[GamePage] WebRTC 실패, HLS로 전환');
     setUseWebRTC(false);
+    setWebrtcReady(false);
   };
+  
+  // WebRTC 准备好时的回调
+  const handleWebRTCReady = () => {
+    console.log('[GamePage] ✅ WebRTC 연결 완료, 준비 완료');
+    setWebrtcReady(true);
+  };
+  
+  // 游戏结束时重置 WebRTC 状态
+  useEffect(() => {
+    if (!gameStarted) {
+      // 游戏结束后，重置 WebRTC 状态
+      setWebrtcReady(false);
+      setUseWebRTC(false);
+      console.log('[GamePage] 게임 종료, WebRTC 상태 리셋');
+    }
+  }, [gameStarted]);
+  
+  // 游戏开始时，如果 WebRTC 已经准备好，立即切换到 WebRTC
+  useEffect(() => {
+    if (gameStarted && useWebRTC && webrtcReady) {
+      console.log('[GamePage] ✅ 게임 시작 + WebRTC 준비 완료, 즉시 WebRTC로 전환');
+    } else if (gameStarted && useWebRTC && !webrtcReady) {
+      console.log('[GamePage] ⏳ 게임 시작했지만 WebRTC 아직 준비 중, 준비되면 자동 전환');
+    }
+  }, [gameStarted, useWebRTC, webrtcReady]);
+  
+  // 游戏开始且有 sessionId 时，自动启动 heartbeat
+  useEffect(() => {
+    if (gameStarted && sessionId && !isMockLogin) {
+      console.log('[GamePage] 게임 시작 + sessionId 설정됨, 하트비트 자동 시작');
+      startHeartbeat();
+    } else if (!gameStarted) {
+      // 游戏结束时清除 heartbeat
+      clearHeartbeat();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameStarted, sessionId]);
 
   // 시스템 시간 업데이트
   useEffect(() => {
@@ -83,30 +134,30 @@ const GamePage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // 监听 machineId 变化，更新主题和标题
+  // machineId 변경 감지, 테마 및 제목 업데이트
   useEffect(() => {
     if (machineId) {
-      // 更新主题
+      // 테마 업데이트
       const savedTheme = localStorage.getItem(`game_theme_${machineId}`);
       const theme = savedTheme || `theme-${machineId}`;
       setGameTheme(theme);
-      console.log('[GamePage] 应用游戏主题:', theme, '机器:', machineId);
+      console.log('[GamePage] 게임 테마 적용:', theme, '기계:', machineId);
       
-      // 更新标题
+      // 제목 업데이트
       const savedTitle = localStorage.getItem(`game_title_${machineId}`);
       const title = savedTitle || '블랙핑크 굿즈 뽑기';
       setGameTitle(title);
-      console.log('[GamePage] 应用游戏标题:', title, '机器:', machineId);
+      console.log('[GamePage] 게임 제목 적용:', title, '기계:', machineId);
       
-      // 应用主题到页面根元素
+      // 페이지 루트 요소에 테마 적용
       const gamePageElement = document.querySelector('.game-page');
       if (gamePageElement) {
-        // 移除所有旧的主题类
+        // 모든 기존 테마 클래스 제거
         gamePageElement.className = gamePageElement.className
           .split(' ')
           .filter(cls => !cls.startsWith('theme-'))
           .join(' ');
-        // 添加新的主题类
+        // 새 테마 클래스 추가
         gamePageElement.classList.add(theme);
       }
     }
@@ -115,57 +166,60 @@ const GamePage: React.FC = () => {
   // 타이머 업데이트 - 게임 시작 후에만 작동
   useEffect(() => {
     if (!gameStarted) {
+      // 游戏结束时清除定时器
+      if (gameTimerRef.current) {
+        clearInterval(gameTimerRef.current);
+        gameTimerRef.current = null;
+        console.log('[GamePage] ⏰ 게임 종료, 타이머 정리');
+      }
       return;
     }
     
-    const timer = setInterval(() => {
+    console.log('[GamePage] ⏰ 게임 타이머 시작, 초기 시간:', remainingTime, '초');
+    
+    // 清除之前的定时器（如果存在）
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+    }
+    
+    gameTimerRef.current = setInterval(() => {
       setRemainingTime((prev) => {
         if (prev > 0) {
           return prev - 1;
         } else {
-          // 时间到，自动结束游戏，回到游戏开始前的页面
-          console.log('[GamePage] 게임 시간 종료 (30초), 자동 종료');
+          // 시간 종료, 게임 자동 종료, 게임 시작 전 페이지로 돌아가기
+          console.log('[GamePage] 게임 시간 종료, 자동 종료');
           setGameStarted(false);
           setUseWebRTC(false); // HLS로 전환
-          setGameSuccess(false); // 重置游戏成功状态
-          // 直接返回30，不返回0，这样倒计时会显示30
-          return 30;
+          setGameSuccess(false); // 게임 성공 상태 초기화
+          
+          // 게임 종료 API 호출
+          handleEndGame();
+          
+          // 45을 직접 반환, 0을 반환하지 않아 카운트다운이 45으로 표시됩니다
+          return 45;
         }
       });
     }, 1000);
     
-    return () => clearInterval(timer);
-  }, [gameStarted]);
-
-  // 页面加载时检查登录状态，如果有登录信息则自动恢复 Socket 连接
-  useEffect(() => {
-    const savedUserId = localStorage.getItem('userId');
-    const authToken = localStorage.getItem('authToken');
-    const mockLogin = localStorage.getItem('mockLogin') === 'true';
-    
-    // 如果有登录信息（真实登录或模拟登录），自动连接 Socket
-    if (savedUserId && (authToken || mockLogin)) {
-      console.log('[GamePage] 检测到登录状态，自动恢复 Socket 连接');
-      if (!isConnected && !socket?.connected) {
-        connect(savedUserId);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 只在组件挂载时执行一次
-
-  useEffect(() => {
-    if (isConnected && machineId && !session) {
-      createSession(userId, machineId);
-    }
-  }, [machineId, isConnected, userId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
     return () => {
-      if (session) {
-        leaveSession();
+      console.log('[GamePage] ⏰ 게임 타이머 정리');
+      if (gameTimerRef.current) {
+        clearInterval(gameTimerRef.current);
+        gameTimerRef.current = null;
       }
     };
-  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gameStarted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 컴포넌트 언마운트 시 정리
+  useEffect(() => {
+    return () => {
+      // 清除轮询定时器
+      clearPolling();
+      // 清除 하트비트
+      clearHeartbeat();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleBack = () => {
     // 게임이 시작된 상태에서 나가기 버튼을 클릭하면 관전 페이지로 돌아감
@@ -174,139 +228,665 @@ const GamePage: React.FC = () => {
       setGameStarted(false);
       setGameSuccess(false);
       setUseWebRTC(false); // HLS로 전환
-      setRemainingTime(30); // 타이머 리셋
-      // TODO: 서버에 게임 종료 알림 (필요한 경우)
+      setRemainingTime(45); // 타이머 리셋
+      
+      // 调用游戏结束 API
+      handleEndGame();
+      
       return;
     }
     
-    // 게임이 시작되지 않은 상태에서는 홈으로 이동
-    if (session) {
-      leaveSession();
+    // 如果在队列中，清除轮询
+    if (position !== null) {
+      clearPolling();
+      setPosition(null);
+      setQueueState(null);
+      setCanStart(false);
+      setStartToken(null);
     }
+    
+    // 게임이 시작되지 않은 상태에서는 홈으로 이동
     navigate('/');
   };
 
-  const handleStartGame = async () => {
+  // 处理游戏结束
+  const handleEndGame = async () => {
+    // 防止重复调用：使用同步的 ref 标志（不依赖异步状态更新）
+    if (isEndingGameRef.current) {
+      console.log('[GamePage] 게임 종료 이미 처리 중, 중복 호출 방지');
+      return;
+    }
+    
+    // 立即设置标志，防止在异步执行期间被重复调用
+    isEndingGameRef.current = true;
+    
+    // 记录游戏总时长（用于调试 30 秒问题）
+    const totalGameTime = gameStartTimeRef.current > 0 
+      ? ((Date.now() - gameStartTimeRef.current) / 1000).toFixed(1) 
+      : '未知';
+    
+    console.log('[GamePage] 게임 종료 시작, 중복 호출 방지 플래그 설정');
+    console.log(`[GamePage] ⏱️  游戏总时长: ${totalGameTime}초`);
+    
+    // 立即停止倒计时（确保倒计时立即停止）
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+      console.log('[GamePage] ⏰ 게임 종료 시 타이머 정리');
+    }
+    
+    // 清除 하트비트
+    clearHeartbeat();
+    
+    if (isMockLogin) {
+      console.log('[GamePage] 모의 로그인 모드, /api/game/end 호출 건너뛰기');
+      // 模拟游戏结果
+      alert('게임이 종료되었습니다!\n\n결과: 실패\n획득 코인: 0');
+      // 清除 sessionId
+      setSessionId(null);
+      // 重置标志（在下次游戏时可以再次调用）
+      // 不要在这里立即重置，因为可能在游戏结束后的状态清理中再次触发
+      return;
+    }
+
+    try {
+      console.log('[GamePage] 게임 종료 API 호출 (/api/game/end)');
+      
+      const requestBody: { sessionId?: string } = {};
+      if (sessionId) {
+        requestBody.sessionId = sessionId;
+      }
+
+      const data = await endGame(requestBody);
+      
+      console.log('[GamePage] 게임 종료 성공:', data);
+      
+      // 显示游戏结果
+      if (data.success) {
+        const result = data.result || '알 수 없음';
+        const earnedCoins = data.earnedCoins || 0;
+        const resultMessage = result === 'success' ? '성공! 🎉' : '실패';
+        
+        alert(`게임이 종료되었습니다!\n\n결과: ${resultMessage}\n획득 코인: ${earnedCoins}`);
+        
+        // 如果有返回的余额，更新余额
+        if (data.remainingCoins !== undefined) {
+          setMyCoins(data.remainingCoins);
+          localStorage.setItem('balance', String(data.remainingCoins));
+          console.log('[GamePage] 💰 남은 코인 업데이트:', data.remainingCoins);
+        }
+      } else {
+        alert('게임이 종료되었습니다.');
+      }
+    } catch (error) {
+      console.error('[GamePage] 게임 종료 실패:', error);
+      // 即使失败也显示一个提示
+      alert('게임이 종료되었습니다.');
+    } finally {
+      // 清除 sessionId
+      setSessionId(null);
+      console.log('[GamePage] 게임 종료 처리 완료');
+      // 不要在这里重置 isEndingGameRef.current，让它在游戏重新开始时重置
+    }
+  };
+
+  // 清除轮询
+  const clearPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+      console.log('[GamePage] 대기열 확인 중지');
+    }
+  };
+  
+  // 清除 하트비트
+  const clearHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+      console.log('[GamePage] 하트비트 중지');
+    }
+  };
+  
+  // 开始轮询队列状态（统一30秒间隔）
+  const startPolling = () => {
+    // 清除已有的轮询
+    clearPolling();
+    
+    const pollingInterval = 30000; // 统一30초
+    
+    console.log('[GamePage] ========================================');
+    console.log(`[GamePage] 🔄 대기열 상태 확인 시작`);
+    console.log(`[GamePage] - 간격: ${pollingInterval / 1000}초마다`);
+    console.log(`[GamePage] - API: GET /api/queue/reserved_check`);
+    console.log('[GamePage] ========================================');
+    
+    // 立即执行一次
+    console.log('[GamePage] 📞 즉시 첫 번째 확인 실행...');
+    pollReservedStatus();
+    
+    // 30초마다轮询
+    pollingIntervalRef.current = setInterval(() => {
+      console.log('[GamePage] 📞 정기 확인 (30초마다)...');
+      pollReservedStatus();
+    }, pollingInterval);
+  };
+  
+  // 开始 하트비트 (게임 진행 중 3-5초마다)
+  const startHeartbeat = () => {
+    clearHeartbeat();
+    
+    if (!sessionId) {
+      console.warn('[GamePage] sessionId가 없어 하트비트를 시작할 수 없습니다');
+      return;
+    }
+    
+    const heartbeatInterval = 4000; // 4초 (3-5초 사이)
+    
+    console.log(`[GamePage] 하트비트 시작 (${heartbeatInterval / 1000}초마다)`);
+    
+    // 立即执行一次
+    sendHeartbeatRequest(sessionId);
+    
+    // 定期发送 하트비트
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (sessionId) {
+        sendHeartbeatRequest(sessionId);
+      }
+    }, heartbeatInterval);
+  };
+  
+  // 发送 하트비트请求
+  const sendHeartbeatRequest = async (currentSessionId: string) => {
+    if (!currentSessionId || isMockLogin) {
+      return;
+    }
+    
+    // 计算经过的时间（用于调试 30 秒问题）
+    const elapsedSeconds = gameStartTimeRef.current > 0 
+      ? ((Date.now() - gameStartTimeRef.current) / 1000).toFixed(1) 
+      : '未知';
+    
+    try {
+      await sendHeartbeat({ sessionId: currentSessionId });
+      console.log(`[GamePage] 하트비트 전송 성공 (게임 경과: ${elapsedSeconds}초)`);
+    } catch (error) {
+      console.error(`[GamePage] 하트비트 전송 실패 (게임 경과: ${elapsedSeconds}초):`, error);
+      // 하트비트 실패해도 게임은 계속 진행
+    }
+  };
+
+  // 轮询队列状态
+  const pollReservedStatus = async () => {
+    if (!machineId || isMockLogin) {
+      return;
+    }
+
+    try {
+      const numericMachineId = parseInt(machineId, 10);
+      
+      // userId는 숫자 또는 문자열 모두 가능 (백엔드 API가 문자열도 받음)
+      console.log('[GamePage] 🔄 轮询队列状态:', { userId, machineId: numericMachineId });
+      
+      const data = await checkReservedStatus(userId, numericMachineId);
+      
+      console.log('[GamePage] ========================================');
+      console.log('[GamePage] 📋 队列状态详情:');
+      console.log('[GamePage] - position (위치):', data.position);
+      console.log('[GamePage] - state (상태):', data.state);
+      console.log('[GamePage] - canStart (시작 가능):', data.canStart);
+      console.log('[GamePage] - startToken:', data.startToken ? '✅ 있음' : '❌ 없음');
+      if (data.startToken) {
+        console.log('[GamePage] - startToken 값:', data.startToken);
+      }
+      console.log('[GamePage] ========================================');
+      
+      // 更新队列状态 (새로운 API 형식)
+      const newPosition = data.position;
+      const newState = data.state;
+      const newCanStart = data.canStart;
+      const newStartToken = data.startToken;
+      
+      const oldPosition = position;
+      
+      setPosition(newPosition);
+      setQueueState(newState);
+      setCanStart(newCanStart);
+      setStartToken(newStartToken);
+      
+      // 根据新的状态处理逻辑
+      // 游戏开始条件：position === 1 && state === "ready" && canStart === true && startToken存在
+      if (newPosition === 1 && newState === 'ready' && newCanStart && newStartToken) {
+        // 可以开始游戏
+        console.log('[GamePage] ========================================');
+        console.log('[GamePage] ✅✅✅ 게임 시작 가능 조건 만족! ✅✅✅');
+        console.log('[GamePage] - position:', newPosition, '(1번째)');
+        console.log('[GamePage] - state:', newState, '(준비됨)');
+        console.log('[GamePage] - canStart:', newCanStart, '(가능)');
+        console.log('[GamePage] - startToken:', newStartToken);
+        console.log('[GamePage] 🛑 轮询 중지');
+        console.log('[GamePage] 🎮 자동으로 게임 시작!');
+        console.log('[GamePage] ========================================');
+        clearPolling();
+        
+        // 自动开始游戏
+        if (oldPosition !== null && oldPosition > 1) {
+          console.log('[GamePage] 💚 대기가 완료되었습니다! 자동으로 게임을 시작합니다.');
+        }
+        
+        // 调用游戏开始函数
+        handleGameStart(newStartToken); // 直接传递 token
+      } else if (newState === 'playing') {
+        // 游戏进行中
+        console.log('[GamePage] ========================================');
+        console.log('[GamePage] ⚠️ 게임 진행 중');
+        console.log('[GamePage] state=playing, 이미 게임이 시작됨');
+        console.log('[GamePage] 🛑 轮询 중지');
+        console.log('[GamePage] ========================================');
+        clearPolling();
+      } else if (newPosition === null) {
+        // 不在队列中
+        console.log('[GamePage] ========================================');
+        console.log('[GamePage] ⚠️ 대기열에 없음');
+        console.log('[GamePage] position === null, 队列에서 제거됨');
+        console.log('[GamePage] 🛑 轮询 중지');
+        console.log('[GamePage] ========================================');
+        clearPolling();
+      } else if (newState === 'waiting') {
+        // 还在队列中等待
+        console.log('[GamePage] ⏳ 대기 중...');
+        console.log('[GamePage] - 현재 위치:', newPosition);
+        console.log('[GamePage] - 앞에 대기:', newPosition > 1 ? `${newPosition - 1}명` : '없음');
+        console.log('[GamePage] - 다음 확인: 30초 후');
+      }
+    } catch (error) {
+      console.error('[GamePage] 轮询队列状态失败:', error);
+      // 不中断轮询，继续尝试
+    }
+  };
+
+  // 处理按钮点击 - 检查所有条件并决定下一步操作
+  const handleStartButtonClick = async () => {
+    console.log('[GamePage] 🎮 게임 시작 버튼 클릭', {
+      isStartingGame,
+      machineId,
+      userId,
+      myCoins,
+      position,
+      queueState,
+      canStart,
+      hasStartToken: !!startToken
+    });
+
     if (isStartingGame) {
-      return; // 防止重复点击
+      console.log('[GamePage] 이미 게임 시작 중...');
+      alert('게임 시작 중입니다. 잠시만 기다려주세요.');
+      return;
     }
 
     if (!machineId) {
+      console.error('[GamePage] ❌ 기계 ID가 없습니다');
       alert('기계 ID가 없습니다');
       return;
     }
 
     // 模拟登录时，允许游戏开始，不检查 userId
     if (!isMockLogin && !userId) {
+      console.error('[GamePage] ❌ 사용자 ID가 없습니다. 다시 로그인해주세요.');
       alert('사용자 ID가 없습니다. 다시 로그인해주세요.');
       navigate('/login');
       return;
     }
 
-    // 코인 확인（API 响应中会返回实际余额）
-    if (myCoins < 10) {
-      alert('코인이 부족합니다');
+    // MVP 단계: 코인 확인 생략
+    // 게임 시작 조건: position=1, state=ready, canStart=true, startToken 존재만 확인
+    console.log('[GamePage] 💡 MVP 모드: 코인 확인 생략, 대기열 조건만 확인');
+
+    // 1. 如果满足所有游戏开始条件，直接开始游戏
+    if (startToken && position === 1 && queueState === 'ready' && canStart) {
+      console.log('[GamePage] ✅ 게임 시작 조건 만족, 게임 시작!');
+      await handleGameStart(startToken); // 显式传递 token
+      return;
+    }
+
+    // 2. 如果还没有进入队列，自动进入队列
+    if (position === null) {
+      console.log('[GamePage] 대기열에 없음, 자동으로 대기열 진입');
+      await handleGameEnter();
+      return;
+    }
+
+    // 3. 如果已经在队列中但还没轮到，提示用户
+    if (position !== null && position > 1) {
+      console.log('[GamePage] ⏳ 대기 중, position:', position);
+      alert(`현재 대기 중입니다.\n앞에 ${position - 1}명이 대기 중입니다.`);
+      return;
+    }
+
+    // 4. 如果 position === 1 但其他条件不满足，显示具体原因
+    if (position === 1) {
+      console.error('[GamePage] ❌ position === 1이지만 시작 조건 불만족');
+      
+      let errorMessage = '게임을 시작할 수 없습니다.\n\n';
+      
+      if (queueState !== 'ready') {
+        errorMessage += `❌ 상태: ${queueState ?? '없음'} (ready여야 함)\n`;
+      }
+      if (!canStart) {
+        errorMessage += '❌ 시작 불가능 상태\n';
+      }
+      if (!startToken) {
+        errorMessage += '❌ 시작 토큰이 없습니다.\n';
+      }
+      
+      errorMessage += '\n잠시 후 다시 시도해주세요.';
+      
+      alert(errorMessage);
+      return;
+    }
+
+    // 5. 其他未预期的情况
+    console.error('[GamePage] ❌ 예상치 못한 상태');
+    alert('게임 시작 조건을 확인할 수 없습니다.\n잠시 후 다시 시도해주세요.');
+  };
+
+  // 处理游戏入场 (/game/enter) - 自动完成整个流程
+  const handleGameEnter = async () => {
+    setIsStartingGame(true);
+
+    try {
+      // 模拟登录时，跳过 API 调用
+      if (isMockLogin) {
+        console.log('[GamePage] 모의 로그인 모드, API 호출 건너뛰기');
+        setRemainingTime(45);
+        setGameStarted(true);
+        setUseWebRTC(true);
+        setIsStartingGame(false);
+        return;
+      }
+
+      console.log('[GamePage] 🎯 게임 시작 프로세스 시작');
+      console.log('[GamePage] 1️⃣ 대기열 진입 시도 (/api/queue/enter)');
+      console.log('[GamePage] userId 원본 값:', userId, '타입:', typeof userId);
+      
+      // userId 验证
+      if (!userId || userId === 'null' || userId === 'undefined') {
+        throw new Error('사용자 ID가 없습니다. 다시 로그인해주세요.');
+      }
+      
+      if (!machineId) {
+        throw new Error('기계 ID가 없습니다.');
+      }
+      
+      const numericMachineId = parseInt(machineId, 10);
+      if (isNaN(numericMachineId)) {
+        throw new Error('기계 ID가 유효하지 않습니다.');
+      }
+      
+      // userId 可以是数字或字符串格式，直接使用
+      const requestBody = {
+        userId: userId, // 直接使用原始 userId（可以是数字或字符串）
+        machineId: numericMachineId,
+      };
+
+      console.log('[GamePage] /api/queue/enter 요청:', requestBody);
+
+      const data = await enterGame(requestBody);
+
+      console.log('[GamePage] /api/queue/enter 응답:', data);
+
+      if (data.success) {
+        // 进入队列成功
+        const initialPosition = data.position || 1;
+        console.log('[GamePage] ✅ 대기열 진입 성공, 위치:', initialPosition);
+        
+        setPosition(initialPosition);
+        setQueueState('waiting');
+        setCanStart(false);
+        
+        // 立即检查状态，看是否可以直接开始
+        console.log('[GamePage] 2️⃣ 즉시 상태 확인 (/api/queue/reserved_check)');
+        const statusData = await checkReservedStatus(userId, numericMachineId);
+        
+        console.log('[GamePage] 상태 확인 결과:', {
+          position: statusData.position,
+          state: statusData.state,
+          canStart: statusData.canStart,
+          hasStartToken: !!statusData.startToken
+        });
+        
+        // 更新状态
+        setPosition(statusData.position);
+        setQueueState(statusData.state);
+        setCanStart(statusData.canStart);
+        setStartToken(statusData.startToken);
+        
+        // 如果可以开始，直接开始游戏
+        if (statusData.position === 1 && statusData.state === 'ready' && statusData.canStart && statusData.startToken) {
+          console.log('[GamePage] 3️⃣ ✅ 조건 충족! 즉시 게임 시작');
+          await handleGameStart(statusData.startToken); // 直接传递 token
+        } else {
+          console.log('[GamePage] 3️⃣ ⏳ 아직 조건 불충족, 대기 중...');
+          if (statusData.position && statusData.position > 1) {
+            console.log(`[GamePage] 📝 앞에 ${statusData.position - 1}명 대기 중`);
+          }
+          // 开始轮询
+          startPolling();
+        }
+      } else {
+        console.error(`[GamePage] ❌ 게임 입장 실패: ${data.message || '알 수 없는 오류'}`);
+        alert(`게임 입장 실패: ${data.message || '알 수 없는 오류'}`);
+      }
+    } catch (error) {
+      console.error('[GamePage] ========== 게임 입장 오류 ==========');
+      console.error('[GamePage] 에러 객체:', error);
+      console.error('[GamePage] 에러 타입:', typeof error);
+      console.error('[GamePage] error instanceof Error:', error instanceof Error);
+      
+      if (error instanceof Error) {
+        const errorMessage = error.message;
+        const errorCode = (error as any).code;
+        const rawData = (error as any).rawData;
+        
+        console.error('[GamePage] 📋 에러 상세 정보:');
+        console.error('[GamePage] - 에러 코드 (errorCode):', errorCode);
+        console.error('[GamePage] - 에러 메시지 (errorMessage):', errorMessage);
+        console.error('[GamePage] - 원본 데이터 (rawData):', rawData);
+        console.error('[GamePage] - errorCode 타입:', typeof errorCode);
+        console.error('[GamePage] - errorMessage 타입:', typeof errorMessage);
+        
+        // 检查各种可能的 QUEUE_ENTERED 格式
+        const isQueueEnteredError = 
+          errorCode === 'QUEUE_ENTERED' ||
+          (typeof errorMessage === 'string' && errorMessage.includes('QUEUE_ENTERED')) ||
+          (typeof errorMessage === 'string' && errorMessage.includes('이미 대기열에')) ||
+          (rawData && rawData.code === 'QUEUE_ENTERED') ||
+          (rawData && rawData.message && rawData.message.includes('QUEUE_ENTERED'));
+        
+        console.error('[GamePage] 🔍 QUEUE_ENTERED 검사:');
+        console.error('[GamePage] - errorCode === "QUEUE_ENTERED":', errorCode === 'QUEUE_ENTERED');
+        console.error('[GamePage] - errorMessage.includes("QUEUE_ENTERED"):', typeof errorMessage === 'string' && errorMessage.includes('QUEUE_ENTERED'));
+        console.error('[GamePage] - errorMessage.includes("이미 대기열에"):', typeof errorMessage === 'string' && errorMessage.includes('이미 대기열에'));
+        console.error('[GamePage] - rawData.code === "QUEUE_ENTERED":', rawData && rawData.code === 'QUEUE_ENTERED');
+        console.error('[GamePage] - 최종 판단 (isQueueEnteredError):', isQueueEnteredError);
+        
+        // 如果错误是 QUEUE_ENTERED（已在队列中），直接检查状态
+        if (isQueueEnteredError) {
+          console.log('[GamePage] ========================================');
+          console.log('[GamePage] ✅✅✅ QUEUE_ENTERED 에러 감지됨! ✅✅✅');
+          console.log('[GamePage] 이미 대기열에 있음 → /queue/reserved_check 호출');
+          console.log('[GamePage] ========================================');
+          
+          // 直接调用 reserved_check 获取当前状态
+          try {
+            const numericMachineId = parseInt(machineId!, 10);
+            const statusData = await checkReservedStatus(userId, numericMachineId);
+            
+            console.log('[GamePage] 🎯 대기열 상태 확인 완료:');
+            console.log('[GamePage] - position:', statusData.position);
+            console.log('[GamePage] - state:', statusData.state);
+            console.log('[GamePage] - canStart:', statusData.canStart);
+            console.log('[GamePage] - startToken:', statusData.startToken ? '✅ 있음' : '❌ 없음');
+            
+            // 更新状态
+            setPosition(statusData.position);
+            setQueueState(statusData.state);
+            setCanStart(statusData.canStart);
+            setStartToken(statusData.startToken);
+            
+            // 如果可以开始游戏，自动开始
+            if (statusData.position === 1 && statusData.state === 'ready' && statusData.canStart && statusData.startToken) {
+              console.log('[GamePage] ========================================');
+              console.log('[GamePage] ✅ 게임 시작 가능!');
+              console.log('[GamePage] 💚 position=1, state=ready, startToken 있음');
+              console.log('[GamePage] 🎮 자동으로 게임 시작!');
+              console.log('[GamePage] ========================================');
+              
+              // 自动开始游戏
+              await handleGameStart(statusData.startToken); // 直接传递 token
+              
+            } else if (statusData.state === 'playing') {
+              console.log('[GamePage] ========================================');
+              console.log('[GamePage] ⚠️ 이미 게임 진행 중');
+              console.log('[GamePage] state=playing, 게임이 이미 시작됨');
+              console.log('[GamePage] ========================================');
+            } else {
+              console.log('[GamePage] ========================================');
+              console.log('[GamePage] ⏳ 아직 대기 중');
+              console.log('[GamePage] 30초마다 자동으로 /queue/reserved_check 호출 시작');
+              console.log('[GamePage] ========================================');
+              
+              // 开始轮询
+              startPolling();
+              
+              if (statusData.position && statusData.position > 1) {
+                console.log(`[GamePage] 📝 현재 위치: ${statusData.position}번 (앞에 ${statusData.position - 1}명)`);
+              } else {
+                console.log('[GamePage] 대기 중, 곧 시작 가능');
+              }
+            }
+            
+            return;
+          } catch (statusError) {
+            console.error('[GamePage] 상태 확인 실패:', statusError);
+            // 如果状态检查也失败，显示原始错误
+          }
+        }
+        
+        // 其他错误正常显示
+        console.error(`[GamePage] ❌ 게임 입장 중 오류가 발생했습니다: ${errorMessage}`);
+      } else {
+        console.error('[GamePage] ❌ 게임 입장 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
+    } finally {
+      setIsStartingGame(false);
+    }
+  };
+
+  // 处理游戏开始 (/game/start)
+  const handleGameStart = async (token?: string) => {
+    // 使用传入的 token 或状态中的 startToken
+    const gameStartToken = token || startToken;
+    
+    if (!gameStartToken) {
+      console.error('[GamePage] ❌ 게임 시작 토큰이 없습니다. 대기열을 확인해주세요.');
       return;
     }
 
     setIsStartingGame(true);
 
     try {
-      // 模拟登录时，跳过 API 调用，直接开始游戏
-      if (isMockLogin) {
-        console.log('[GamePage] 模拟登录模式，跳过 API 调用，直接开始游戏');
-        
-        // 设置游戏状态
-        setRemainingTime(30); // 默认游戏时长 30 秒
-        setGameStarted(true);
-        setUseWebRTC(true); // 게임 시작 시 WebRTC로 전환
-        
-        setIsStartingGame(false);
-        return;
-      }
-
-      console.log('[GamePage] 게임 시작 API 호출');
+      console.log('[GamePage] 게임 시작 API 호출 (/game/start)');
+      console.log('[GamePage] userId 원본 값:', userId, '타입:', typeof userId);
+      console.log('[GamePage] startToken:', gameStartToken);
       
-      // 调用游戏开始 API
-      // POST /api/game/start
-      const backendApiUrl = import.meta.env.VITE_API_URL || '';
-      const apiUrl = backendApiUrl ? `${backendApiUrl}/api/game/start` : '/api/game/start';
-      
-      // 确保 userId 是数字
-      const numericUserId = parseInt(userId, 10);
-      if (isNaN(numericUserId)) {
-        throw new Error('사용자 ID가 유효하지 않습니다.');
+      // userId 验证
+      if (!userId || userId === 'null' || userId === 'undefined') {
+        throw new Error('사용자 ID가 없습니다. 다시 로그인해주세요.');
       }
       
+      if (!machineId) {
+        throw new Error('기계 ID가 없습니다.');
+      }
+      
+      const numericMachineId = parseInt(machineId, 10);
+      if (isNaN(numericMachineId)) {
+        throw new Error('기계 ID가 유효하지 않습니다.');
+      }
+      
+      // userId 可以是数字或字符串格式，直接使用
       const requestBody = {
-        machineId: parseInt(machineId, 10),
-        userId: numericUserId,
+        userId: userId, // 直接使用原始 userId（可以是数字或字符串）
+        machineId: numericMachineId,
+        startToken: gameStartToken, // 使用 gameStartToken 而不是 startToken
       };
 
-      console.log('[GamePage] API 요청:', apiUrl);
-      console.log('[GamePage] 요청 본문:', requestBody);
+      console.log('[GamePage] ========================================');
+      console.log('[GamePage] 🚀 /game/start 요청 상세:');
+      console.log('[GamePage] - userId:', userId, '(타입:', typeof userId, ')');
+      console.log('[GamePage] - machineId:', numericMachineId);
+      console.log('[GamePage] - startToken:', startToken);
+      console.log('[GamePage] - 완전한 요청 body:', JSON.stringify(requestBody, null, 2));
+      console.log('[GamePage] ========================================');
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
+      const data = await startGame(requestBody);
 
-      console.log('[GamePage] API 응답 상태:', response.status);
+      console.log('[GamePage] /game/start 응답:', data);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `게임 시작 실패 (${response.status})`;
-        
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.message || errorData.error || errorMessage;
-          console.error('[GamePage] API 오류 응답:', errorData);
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        
-        alert(errorMessage);
-        setIsStartingGame(false);
-        return;
-      }
-
-      const data = await response.json();
-      console.log('[GamePage] API 응답 데이터:', data);
-
-      // API 响应处理
       if (data.success) {
-        // 更新余额
-        const remainingCoins = data.remainingCoins || myCoins;
-        setMyCoins(remainingCoins);
-        localStorage.setItem('balance', String(remainingCoins));
+        // 游戏开始成功
+        gameStartTimeRef.current = Date.now(); // 记录游戏开始时间
+        console.log('[GamePage] 게임 시작 성공');
+        console.log('[GamePage] ⏱️  游戏开始时间:', new Date(gameStartTimeRef.current).toISOString());
 
-        // 更新游戏时间（durationSec 秒）
-        const durationSec = data.durationSec || 30;
+        // 更新余额
+        if (data.remainingCoins !== undefined) {
+          setMyCoins(data.remainingCoins);
+          localStorage.setItem('balance', String(data.remainingCoins));
+        }
+
+        // 更新游戏时间
+        const durationSec = data.durationSec || 45;
         setRemainingTime(durationSec);
 
-        // 如果有 sessionId，更新 session（如果需要）
+        // 保存 sessionId
         if (data.sessionId) {
-          console.log('[GamePage] 게임 세션 ID:', data.sessionId);
-          // 注意：这里可能需要更新 SocketContext 中的 session
+          setSessionId(data.sessionId);
         }
 
         // 游戏开始
-    setGameStarted(true);
-        setUseWebRTC(true); // 게임 시작 시 WebRTC로 전환
+        setGameStarted(true);
+        setUseWebRTC(true);
+        
+        // 重置游戏结束标志（允许在新游戏结束时再次调用）
+        isEndingGameRef.current = false;
+        
+        console.log('[GamePage] ========================================');
+        console.log('[GamePage] 🎮 게임 상태 업데이트:');
+        console.log('[GamePage] - gameStarted: true');
+        console.log('[GamePage] - useWebRTC: true');
+        console.log('[GamePage] - durationSec:', durationSec, '초');
+        console.log('[GamePage] - sessionId:', data.sessionId);
+        console.log('[GamePage] - 게임 종료 플래그 리셋: false');
+        console.log('[GamePage] ========================================');
+        
+        // 清除队列状态
+        setPosition(null);
+        setQueueState(null);
+        setCanStart(false);
+        setStartToken(null);
+        clearPolling();
 
-        console.log('[GamePage] 게임 시작 성공:', {
-          remainingCoins,
-          durationSec,
+        // sessionId 设置后，useEffect 会自动启动 heartbeat
+
+        console.log('[GamePage] 게임 시작 완료:', {
           sessionId: data.sessionId,
-          gameStartTime: data.gameStartTime,
+          durationSec,
+          remainingCoins: data.remainingCoins,
         });
       } else {
-        // 游戏开始失败
         const reason = data.reason || '알 수 없는 오류';
-        alert(`게임 시작 실패: ${reason}`);
+        console.error(`[GamePage] ❌ 게임 시작 실패: ${reason}`);
         
         // 如果是因为余额不足，更新余额
         if (data.remainingCoins !== undefined) {
@@ -317,67 +897,68 @@ const GamePage: React.FC = () => {
     } catch (error) {
       console.error('[GamePage] 게임 시작 오류:', error);
       if (error instanceof Error) {
-        alert(`게임 시작 중 오류가 발생했습니다: ${error.message}`);
+        console.error(`[GamePage] ❌ 게임 시작 중 오류가 발생했습니다: ${error.message}`);
       } else {
-        alert('게임 시작 중 오류가 발생했습니다. 다시 시도해주세요.');
+        console.error('[GamePage] ❌ 게임 시작 중 오류가 발생했습니다. 다시 시도해주세요.');
       }
     } finally {
       setIsStartingGame(false);
     }
   };
 
+  // 游戏控制函数 - 通过 API 实现（需要后端提供相应的 API）
   const handleMove = (direction: 'up' | 'down' | 'left' | 'right' | 'forward' | 'backward') => {
-    if (gameStarted && session?.status === SessionStatus.ACTIVE && moveClaw) {
-      moveClaw(direction);
+    if (!gameStarted || !sessionId) {
+      console.warn('[GamePage] 게임이 시작되지 않았거나 sessionId가 없습니다');
+      return;
     }
+    
+    // TODO: 通过 API 调用控制抓娃娃机移动
+    // 例如: await moveClawAPI({ sessionId, direction });
+    console.log('[GamePage] 이동 명령:', direction);
   };
 
   const handleDrop = () => {
-    if (gameStarted && session?.status === SessionStatus.ACTIVE && dropClaw) {
-      dropClaw();
+    if (!gameStarted || !sessionId) {
+      console.warn('[GamePage] 게임이 시작되지 않았거나 sessionId가 없습니다');
+      return;
     }
+    
+    // TODO: 通过 API 调用控制抓娃娃机下降
+    // 例如: await dropClawAPI({ sessionId });
+    console.log('[GamePage] 하강 명령');
   };
 
   const handleGrab = () => {
-    if (gameStarted && session?.status === SessionStatus.ACTIVE && grabClaw) {
-      grabClaw();
-      // 서버에서 game:result 이벤트를 받으면 결과를 표시
-    }
-  };
-
-  // 게임 결과 리스너 - 서버에서 game:result 이벤트를 받으면 처리
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleGameResult = (data: { result: { success: boolean; reason?: string; timestamp: number } }) => {
-      console.log('게임 결과 수신:', data.result);
-      if (data.result.success) {
-        setGameSuccess(true);
-        setGameStarted(false);
-        setUseWebRTC(false); // 게임 종료 시 HLS로 전환
-      } else {
-        // 실패 시 처리 (필요에 따라 추가)
-        alert(`게임 실패: ${data.result.reason || '알 수 없는 오류'}`);
-        setGameStarted(false);
-        setUseWebRTC(false); // 게임 종료 시 HLS로 전환
-      }
-    };
-
-    socket.on('game:result', handleGameResult);
-
-    return () => {
-      socket.off('game:result', handleGameResult);
-    };
-  }, [socket]);
-
-  const handlePlayAgain = () => {
-    if (myCoins < 10) {
-      alert('코인이 부족합니다');
+    if (!gameStarted || !sessionId) {
+      console.warn('[GamePage] 게임이 시작되지 않았거나 sessionId가 없습니다');
       return;
     }
-    // 코인 차감 및 게임 재시작
-    setMyCoins((prev) => prev - 10);
-    setRemainingTime(30); // 타이머 초기화
+    
+    console.log('[GamePage] 🎯 잡기 버튼 클릭, 게임 즉시 종료');
+    
+    // 立即停止倒计时
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+      console.log('[GamePage] ⏰ 잡기 버튼 클릭으로 타이머 즉시 중지');
+    }
+    
+    // 立即停止游戏并调用结束 API
+    setGameStarted(false);
+    setUseWebRTC(false); // HLS로 전환
+    setGameSuccess(false); // 게임 성공 상태 초기화
+    
+    // 调用游戏结束 API
+    handleEndGame();
+  };
+
+  const handlePlayAgain = () => {
+    // MVP 단계: 코인 확인 및 차감 생략
+    console.log('[GamePage] 💡 MVP 모드: 코인 차감 없이 게임 재시작');
+    
+    // 게임 재시작
+    setRemainingTime(45); // 타이머 초기화
     setGameSuccess(false);
     setGameStarted(true);
     setUseWebRTC(true); // 게임 재시작 시 WebRTC로 전환
@@ -444,12 +1025,15 @@ const GamePage: React.FC = () => {
           <div className="game-video-container">
             {machineId && (
               <>
-                {/* HLS 播放器 - 游戏开始前显示，游戏结束后显示 */}
+                {/* HLS 播放器 - 始终加载，根据状态显示/隐藏 */}
                 <div style={{ 
-                  display: gameStarted && useWebRTC ? 'none' : 'block',
+                  display: (gameStarted && useWebRTC && webrtcReady) ? 'none' : 'block',
                   width: '100%',
                   height: '100%',
-                  position: 'relative'
+                  position: 'relative',
+                  opacity: (gameStarted && useWebRTC && webrtcReady) ? 0 : 1,
+                  transition: 'opacity 0.3s ease-in-out', // 淡入淡出效果
+                  pointerEvents: (gameStarted && useWebRTC && webrtcReady) ? 'none' : 'auto'
                 }}>
                   <GameVideo 
                     machineId={machineId}
@@ -459,20 +1043,23 @@ const GamePage: React.FC = () => {
                   />
                 </div>
                 
-                {/* WebRTC 播放器 - 只在游戏开始时加载，游戏结束后卸载 */}
-                {gameStarted && useWebRTC && (
+                {/* WebRTC 播放器 - 游戏开始时显示 */}
+                {(gameStarted && useWebRTC) && (
                   <div style={{ 
-                    display: 'block',
+                    display: 'block', // 始终显示（WebRTCPlayer内部会处理加载状态）
                     width: '100%',
                     height: '100%',
                     position: 'absolute',
                     top: 0,
                     left: 0,
-                    zIndex: 1
+                    zIndex: 1,
+                    opacity: webrtcReady ? 1 : 0.5, // 未就绪时半透明
+                    transition: 'opacity 0.3s ease-in-out',
+                    pointerEvents: 'auto'
                   }}>
                     <WebRTCPlayer 
                       machineId={machineId}
-                      sessionId={session?.sessionId}
+                      sessionId={sessionId || undefined}
                       streamUrl={`http://${red5Host}:${red5Port}/live/viewer.jsp?host=${red5Host}&stream=${streamName}`}
                       app="live"
                       streamName={streamName}
@@ -482,6 +1069,8 @@ const GamePage: React.FC = () => {
                       useSDKPlayer={true} // 使用 SDK 播放器模式
                       licenseKey={licenseKey} // Red5 Pro SDK 许可证密钥 (如果需要)
                       onFallbackToHLS={handleWebRTCFallback} // WebRTC 실패 시 HLS로 전환
+                      onReady={handleWebRTCReady} // WebRTC 准备好时的回调
+                      hidden={false} // 不隐藏，让组件正常显示加载状态
                     />
                   </div>
                 )}
@@ -504,7 +1093,7 @@ const GamePage: React.FC = () => {
           {/* 타이머 */}
           <div className="game-timer">
             <span className="clock-icon">🕐</span>
-            <span>{remainingTime}</span>
+            <span>{gameStarted ? remainingTime : 45}</span>
           </div>
         </div>
 
@@ -592,7 +1181,7 @@ const GamePage: React.FC = () => {
                   <span className="game-controller-icon">🎮</span>
                   <span className="game-start-text">컨트롤 게임 START</span>
                   <span className="game-start-separator"></span>
-                  <span className="game-cost">10 코인</span>
+                  <span className="game-cost">1000 코인</span>
                 </button>
                 
                 <div className="game-my-coin">
@@ -611,18 +1200,43 @@ const GamePage: React.FC = () => {
                 <p className="game-promo-korean">지금 도전해보세요!</p>
               </div>
               
+              {/* 队列状态显示 (새로운 API 형식에 맞춰 수정) */}
+              {position !== null && queueState === 'waiting' && (
+                <div className="game-queue-status">
+                  <div className="queue-waiting">
+                    <span className="queue-icon">⏳</span>
+                    <p className="queue-text">대기 중...</p>
+                    <p className="queue-number">앞에 {position}명 대기 중</p>
+                  </div>
+                </div>
+              )}
+              
               <div className="game-start-container">
                 <button 
                   className="game-start-button" 
-                  onClick={handleStartGame}
-                  disabled={isStartingGame || myCoins < 10}
+                  type="button"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('[GamePage] ========== 버튼 클릭 이벤트 발생 ==========');
+                    await handleStartButtonClick();
+                  }}
+                  disabled={isStartingGame}
+                  style={{
+                    pointerEvents: 'auto',
+                    cursor: isStartingGame ? 'not-allowed' : 'pointer',
+                    position: 'relative',
+                    zIndex: 1000,
+                    opacity: isStartingGame ? 0.6 : 1
+                  }}
                 >
                   <span className="game-controller-icon">🎮</span>
                   <span className="game-start-text">
                     {isStartingGame ? '게임 시작 중...' : '컨트롤 게임 START'}
                   </span>
                   <span className="game-start-separator"></span>
-                  <span className="game-cost">10 코인</span>
+                  <span className="game-cost">1000 코인</span>
                 </button>
                 
                 <div className="game-my-coin">
