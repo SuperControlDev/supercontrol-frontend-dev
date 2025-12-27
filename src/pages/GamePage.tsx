@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import GameVideo from '@/components/GameVideo';
 import WebRTCPlayer from '@/components/WebRTCPlayer';
+import GameResultModal from '@/components/GameResultModal';
 import { startGame, checkReservedStatus, endGame, enterGame, sendHeartbeat } from '@/services/gameApi';
 import './GamePage.css';
 
@@ -56,6 +57,7 @@ const GamePage: React.FC = () => {
   const [gameSuccess, setGameSuccess] = useState(false);
   const [useWebRTC, setUseWebRTC] = useState(false); // WebRTC 사용 여부 (기본값: false, HLS 사용)
   const [isStartingGame, setIsStartingGame] = useState(false); // 게임 시작 중 상태
+  const [gameResult, setGameResult] = useState<'SUCCESS' | 'FAIL' | null>(null); // 게임 결과 (null이면 모달 숨김)
   
   // WebRTC 상태
   const [webrtcReady, setWebrtcReady] = useState(false); // WebRTC 是否准备好
@@ -70,7 +72,7 @@ const GamePage: React.FC = () => {
   const gameTimerRef = useRef<NodeJS.Timeout | null>(null); // 게임 타이머 (倒计时定时器)
   const isEndingGameRef = useRef<boolean>(false); // 게임 종료 중 플래그 (동기 플래그, 중복 호출 방지용)
   const gameStartTimeRef = useRef<number>(0); // 游戏开始时间戳（用于调试 30 秒问题）
-  const [sessionId, setSessionId] = useState<string | null>(null); // 게임 세션 ID
+  const [sessionId, setSessionId] = useState<number | null>(null); // 게임 세션 ID (long 类型)
   
   // 하위 호환성을 위한 계산된 값
   const isReserved = position !== null && queueState === 'waiting'; // 대기 중인지 여부
@@ -281,7 +283,7 @@ const GamePage: React.FC = () => {
     if (isMockLogin) {
       console.log('[GamePage] 모의 로그인 모드, /api/game/end 호출 건너뛰기');
       // 模拟游戏结果
-      alert('게임이 종료되었습니다!\n\n결과: 실패\n획득 코인: 0');
+      setGameResult('FAIL');
       // 清除 sessionId
       setSessionId(null);
       // 重置标志（在下次游戏时可以再次调用）
@@ -292,36 +294,38 @@ const GamePage: React.FC = () => {
     try {
       console.log('[GamePage] 게임 종료 API 호출 (/api/game/end)');
       
-      const requestBody: { sessionId?: string } = {};
-      if (sessionId) {
-        requestBody.sessionId = sessionId;
+      // sessionId 必须传递（真实生成的 sessionId）
+      if (!sessionId) {
+        throw new Error('세션 ID가 없습니다.');
       }
+      
+      console.log('[GamePage] sessionId:', sessionId, '타입:', typeof sessionId);
+      
+      const requestBody: { sessionId: number; reason: string } = {
+        sessionId: sessionId, // long 类型，真实生成的 sessionId，必须传递
+        reason: 'USER_END', // 游戏结束原因
+      };
+      
+      console.log('[GamePage] 요청 body:', requestBody);
+      console.log('[GamePage] 요청 body (JSON):', JSON.stringify(requestBody));
 
       const data = await endGame(requestBody);
       
       console.log('[GamePage] 게임 종료 성공:', data);
       
-      // 显示游戏结果
-      if (data.success) {
-        const result = data.result || '알 수 없음';
-        const earnedCoins = data.earnedCoins || 0;
-        const resultMessage = result === 'success' ? '성공! 🎉' : '실패';
-        
-        alert(`게임이 종료되었습니다!\n\n결과: ${resultMessage}\n획득 코인: ${earnedCoins}`);
-        
-        // 如果有返回的余额，更新余额
-        if (data.remainingCoins !== undefined) {
-          setMyCoins(data.remainingCoins);
-          localStorage.setItem('balance', String(data.remainingCoins));
-          console.log('[GamePage] 💰 남은 코인 업데이트:', data.remainingCoins);
-        }
+      // 根据 result 显示不同的弹窗
+      if (data.result === 'SUCCESS' || data.result === 'FAIL') {
+        // 显示游戏结果弹窗
+        setGameResult(data.result);
       } else {
-        alert('게임이 종료되었습니다.');
+        // 未知结果
+        console.warn('[GamePage] 알 수 없는 게임 결과:', data.result);
+        setGameResult('FAIL'); // 默认显示失败
       }
     } catch (error) {
       console.error('[GamePage] 게임 종료 실패:', error);
       // 即使失败也显示一个提示
-      alert('게임이 종료되었습니다.');
+      setGameResult('FAIL');
     } finally {
       // 清除 sessionId
       setSessionId(null);
@@ -397,7 +401,7 @@ const GamePage: React.FC = () => {
   };
   
   // 发送 하트비트请求
-  const sendHeartbeatRequest = async (currentSessionId: string) => {
+  const sendHeartbeatRequest = async (currentSessionId: number) => {
     if (!currentSessionId || isMockLogin) {
       return;
     }
@@ -849,10 +853,13 @@ const GamePage: React.FC = () => {
         const durationSec = data.durationSec || 45;
         setRemainingTime(durationSec);
 
-        // 保存 sessionId
-        if (data.sessionId) {
-          setSessionId(data.sessionId);
+        // 保存 sessionId（必须从后端获取）
+        if (!data.sessionId) {
+          console.error('[GamePage] ❌ /api/game/start 응답에 sessionId가 없습니다');
+          throw new Error('게임 시작 응답에 세션 ID가 없습니다. 다시 시도해주세요.');
         }
+        setSessionId(data.sessionId);
+        console.log('[GamePage] ✅ sessionId 저장됨:', data.sessionId);
 
         // 游戏开始
         setGameStarted(true);
@@ -1332,6 +1339,15 @@ const GamePage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 游戏结果弹窗 */}
+      {gameResult && (
+        <GameResultModal
+          isOpen={true}
+          result={gameResult}
+          onClose={() => setGameResult(null)}
+        />
+      )}
     </div>
   );
 };

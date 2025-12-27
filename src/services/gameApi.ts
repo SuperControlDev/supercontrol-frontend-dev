@@ -18,7 +18,7 @@ interface GameStartResponse {
   startToken?: string;
   remainingCoins?: number;
   durationSec?: number;
-  sessionId?: string;
+  sessionId?: number; // long 类型
   gameStartTime?: string;
   reservedNumber?: number;
 }
@@ -32,15 +32,15 @@ interface ReservedCheckResponse {
 }
 
 interface GameEndRequest {
-  sessionId?: string;
+  sessionId: number; // long 类型，真实生成的 sessionId，必须传递
+  reason: string; // 游戏结束原因，例如 "USER_END"
 }
 
 interface GameEndResponse {
-  success: boolean;
-  message?: string;
-  result?: string; // 'success' | 'fail' 等
-  earnedCoins?: number; // 获得的金币
-  remainingCoins?: number; // 剩余金币
+  sessionId: number; // long 类型
+  machineId: number; // long 类型
+  result: 'SUCCESS' | 'FAIL';
+  endedAt: number; // timestamp
 }
 
 interface GameEnterRequest {
@@ -55,7 +55,7 @@ interface GameEnterResponse {
 }
 
 interface GameHeartbeatRequest {
-  sessionId: string;
+  sessionId: number; // long 类型
 }
 
 interface GameHeartbeatResponse {
@@ -191,6 +191,9 @@ export async function endGame(request: GameEndRequest): Promise<GameEndResponse>
   console.log('[Game API] URL:', url);
   console.log('[Game API] API_BASE_URL:', API_BASE_URL);
   console.log('[Game API] 요청 데이터:', request);
+  console.log('[Game API] sessionId 값:', request.sessionId, '타입:', typeof request.sessionId);
+  console.log('[Game API] reason 값:', request.reason, '타입:', typeof request.reason);
+  console.log('[Game API] 요청 본문 (JSON):', JSON.stringify(request));
   
   const response = await fetch(url, {
     method: 'POST',

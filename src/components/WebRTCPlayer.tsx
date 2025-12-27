@@ -4,7 +4,7 @@ import type { RTCSubscriber, Red5ProSubscriberConfig } from '@/types/red5pro';
 
 interface WebRTCPlayerProps {
   machineId: string;
-  sessionId?: string;
+  sessionId?: number; // long 类型
   streamUrl?: string; // WebRTC流URL (예: http://localhost:5080/live/webrtc.html?app=live&streamName=mystream)
   app?: string; // Red5应用名称 (기본값: live)
   streamName?: string; // 流名称 (기본값: mystream)
