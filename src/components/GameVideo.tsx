@@ -7,13 +7,15 @@ interface GameVideoProps {
   streamName?: string; // Red5 스트림 이름 (기본값: 'test')
   red5Host?: string; // Red5 호스트 (기본값: localhost)
   red5Port?: number; // Red5 HTTP 포트 (기본값: 5080)
+  autoConnect?: boolean; // 是否自动连接 (기본값: true，进入页面时自动连接)
 }
 
 const GameVideo: React.FC<GameVideoProps> = ({ 
   machineId, 
   streamName = 'test',
   red5Host = import.meta.env.VITE_RED5PRO_HOST || 'localhost',
-  red5Port = parseInt(import.meta.env.VITE_RED5PRO_HTTP_PORT || '5080', 10)
+  red5Port = parseInt(import.meta.env.VITE_RED5PRO_HTTP_PORT || '5080', 10),
+  autoConnect = true, // 默认自动连接，进入页面时立即连接
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -278,7 +280,10 @@ const GameVideo: React.FC<GameVideoProps> = ({
   };
 
   useEffect(() => {
-    connectStream();
+    // autoConnect 为 true 时自动连接（默认 true）
+    if (autoConnect) {
+      connectStream();
+    }
     
     // 클린업 함수
     return () => {
@@ -287,7 +292,7 @@ const GameVideo: React.FC<GameVideoProps> = ({
         hlsRef.current = null;
       }
     };
-  }, [machineId, streamName, red5Host, red5Port]);
+  }, [machineId, streamName, red5Host, red5Port, autoConnect]);
 
   const handleVideoClick = () => {
     const video = videoRef.current;

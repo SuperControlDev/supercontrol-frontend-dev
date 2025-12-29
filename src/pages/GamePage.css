@@ -658,26 +658,32 @@
   box-shadow: 0 1px 4px rgba(255, 90, 122, 0.3);
 }
 
-/* 반응형 - PC와 모바일 동일 */
+/* 반응형 - 모바일에서 전체 화면 표시 */
 @media (max-width: 1024px) {
   .game-page {
     padding: 0;
     background: #f5f5f5;
-    min-height: calc(100vh + 80px);
-    height: calc(100vh + 80px);
-    max-height: calc(100vh + 80px);
+    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
   }
 
   .game-mobile-frame {
+    width: 100%;
     max-width: 100%;
     border-radius: 0;
-    height: calc(100vh + 80px);
-    max-height: calc(100vh + 80px);
-    min-height: calc(100vh + 80px);
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 100vh;
     border: none;
+    /* 移动端占满整个屏幕 */
   }
 
   .game-mobile-frame::before {
+    /* 移动端隐藏刘海 */
     display: none;
   }
 }

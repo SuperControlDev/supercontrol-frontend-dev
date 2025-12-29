@@ -193,7 +193,7 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
     }
   }, []); // 컴포넌트 마운트 시 한 번만 실행
 
-  // Red5 Pro SDK 로드 대기 함수
+  // Red5 Pro SDK 로드 대기 함수（优化：智能检查间隔）
   const waitForSDK = (timeout = 10000): Promise<typeof window.red5prosdk> => {
     return new Promise((resolve, reject) => {
       // 이미 로드되어 있으면 즉시 반환
@@ -209,12 +209,13 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         return;
       }
 
-      // SDK 로드 대기
+      // SDK 로드 대기（优化：前几次快速检查，之后逐渐增加间隔）
       let attempts = 0;
-      const maxAttempts = timeout / 100; // 100ms마다 체크
+      const startTime = Date.now();
       
       const checkSDK = () => {
         attempts++;
+        const elapsed = Date.now() - startTime;
         
         // 스크립트 로드 오류 확인
         if ((window as any).red5proSDKError) {
@@ -223,13 +224,14 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
         }
         
         if (window.red5prosdk) {
-          console.log('[Red5 Pro SDK] SDK 로드 완료');
+          console.log('[Red5 Pro SDK] SDK 로드 완료 (시도:', attempts, '회, 경과:', elapsed, 'ms)');
           console.log('[Red5 Pro SDK] SDK 구조:', Object.keys(window.red5prosdk));
           resolve(window.red5prosdk);
           return;
         }
         
-        if (attempts >= maxAttempts) {
+        // 超时检查
+        if (elapsed >= timeout) {
           const errorMsg = (window as any).red5proSDKLoaded 
             ? 'SDK 스크립트는 로드되었지만 window.red5prosdk가 정의되지 않았습니다. SDK 버전이나 CDN 경로를 확인하세요.'
             : 'SDK 로드 타임아웃: Red5 Pro SDK 스크립트가 로드되지 않았습니다. 네트워크 연결과 CDN 접근을 확인하세요.';
@@ -237,9 +239,12 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
           return;
         }
         
-        setTimeout(checkSDK, 100);
+        // 优化：前10次快速检查（50ms），之后逐渐增加间隔（100ms -> 200ms）
+        const delay = attempts < 10 ? 50 : attempts < 30 ? 100 : 200;
+        setTimeout(checkSDK, delay);
       };
       
+      // 立即开始第一次检查
       checkSDK();
     });
   };
@@ -1328,80 +1333,88 @@ const WebRTCPlayer: React.FC<WebRTCPlayerProps> = ({
       }
     }
     
-    // machineId만 있으면 바로 초기화
+    // machineId만 있으면 바로 초기화（优化：并行处理，减少延迟）
     if (machineId) {
-      // 비디오 요소가 준비될 때까지 대기 후 초기화
-      waitForVideoElement(() => {
-        // 额外的延迟，确保 React 完全渲染完成（参考测试页面的成功经验）
-        setTimeout(() => {
-      // Red5 Pro SDK 사용 여부에 따라 선택
+      // 优化：同时等待视频元素和SDK（如果使用SDK），减少总等待时间
+      const initWebRTC = async () => {
+        // 确保在初始化前显示连接中状态
+        setConnectionState('connecting');
+        setError(null);
+        setDebugInfo('WebRTC 연결 초기화 중...');
+        
         if (useRed5ProSDK) {
-          // SDK 로드를 기다린 후 초기화
-          waitForSDK(5000)
-            .then(() => {
-        console.log('[Red5 Pro SDK] WebRTC 초기화 시작');
-                // 비디오 요소 다시 확인（参考测试页面）
-                const currentVideo = videoRef.current;
-                if (!currentVideo) {
+          try {
+            // 并行等待SDK和视频元素
+            const [sdk, videoReady] = await Promise.all([
+              waitForSDK(5000),
+              new Promise<void>((resolve) => {
+                waitForVideoElement(() => resolve());
+              })
+            ]);
+            
+            // 使用requestAnimationFrame确保DOM更新完成（比setTimeout更快）
+            requestAnimationFrame(() => {
+              const currentVideo = videoRef.current;
+              if (!currentVideo) {
                 console.error('[Red5 Pro SDK] 비디오 요소가 없습니다.');
-                  // 不显示错误，保持连接中状态
-                  setError(null);
-                  setConnectionState('connecting');
-                  setDebugInfo('비디오 요소 준비 중...');
+                setError(null);
+                setConnectionState('connecting');
+                setDebugInfo('비디오 요소 준비 중...');
                 return;
               }
-                
-                // 确保视频元素在 DOM 中（参考测试页面）
-                if (!document.contains(currentVideo)) {
-                  console.error('[Red5 Pro SDK] 비디오 요소가 DOM에 없습니다.');
-                  // 不显示错误，保持连接中状态
-                  setError(null);
-                  setConnectionState('connecting');
-                  setDebugInfo('비디오 요소 준비 중...');
-                  return;
-                }
-                
-                // 确保视频元素有 ID（参考测试页面）
-                if (!currentVideo.id) {
-                  currentVideo.id = 'red5pro-subscriber-video';
-                  console.log('[Red5 Pro SDK] 비디오 요소에 ID 설정:', currentVideo.id);
-                }
-                
-                console.log('[Red5 Pro SDK] ✅ 비디오 요소 준비 완료:', {
-                  tagName: currentVideo.tagName,
-                  id: currentVideo.id,
-                  inDOM: document.contains(currentVideo)
-                });
-                
-                // 确保在初始化前显示连接中状态（不显示错误）
-                setConnectionState('connecting');
+              
+              // 确保视频元素在 DOM 中
+              if (!document.contains(currentVideo)) {
+                console.error('[Red5 Pro SDK] 비디오 요소가 DOM에 없습니다.');
                 setError(null);
-                setDebugInfo('WebRTC 연결 초기화 중...');
-                
-                // 延迟一小段时间，确保 UI 更新为加载状态
-                setTimeout(() => {
-        initializeWebRTCWithRed5Pro();
-                }, 100);
-            })
-            .catch((err) => {
-              console.warn('[WebRTC] Red5 Pro SDK 로드 실패, 네이티브 WebRTC로 fallback:', err);
-                // 保持连接中状态，不显示错误
+                setConnectionState('connecting');
+                setDebugInfo('비디오 요소 준비 중...');
+                return;
+              }
+              
+              // 确保视频元素有 ID
+              if (!currentVideo.id) {
+                currentVideo.id = 'red5pro-subscriber-video';
+                console.log('[Red5 Pro SDK] 비디오 요소에 ID 설정:', currentVideo.id);
+              }
+              
+              console.log('[Red5 Pro SDK] ✅ 비디오 요소 준비 완료:', {
+                tagName: currentVideo.tagName,
+                id: currentVideo.id,
+                inDOM: document.contains(currentVideo)
+              });
+              
+              // 立即初始化，不需要额外延迟
+              initializeWebRTCWithRed5Pro();
+            });
+          } catch (err) {
+            console.warn('[WebRTC] Red5 Pro SDK 로드 실패, 네이티브 WebRTC로 fallback:', err);
+            // 等待视频元素后使用原生WebRTC
+            waitForVideoElement(() => {
+              requestAnimationFrame(() => {
                 setConnectionState('connecting');
                 setError(null);
                 setDebugInfo('네이티브 WebRTC 연결 시도 중...');
+                initializeWebRTC();
+              });
+            });
+          }
+        } else {
+          // Fallback to native WebRTC
+          console.log('[WebRTC] Red5 Pro SDK 비활성화, 네이티브 WebRTC 사용');
+          waitForVideoElement(() => {
+            requestAnimationFrame(() => {
+              setConnectionState('connecting');
+              setError(null);
+              setDebugInfo('네이티브 WebRTC 연결 시도 중...');
               initializeWebRTC();
             });
-      } else {
-        // Fallback to native WebRTC
-          console.log('[WebRTC] Red5 Pro SDK 비활성화, 네이티브 WebRTC 사용');
-            // 保持连接中状态
-            setConnectionState('connecting');
-            setError(null);
-            setDebugInfo('네이티브 WebRTC 연결 시도 중...');
-      initializeWebRTC();
-      }
-        }, 200); // 200ms 延迟，确保 React 渲染完成
-      });
+          });
+        }
+      };
+      
+      // 立即开始初始化
+      initWebRTC();
     } else {
       // machineId가 없어도 연결 중 상태 유지（不显示错误，只显示加载）
       setConnectionState('connecting');

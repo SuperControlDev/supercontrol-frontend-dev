@@ -1,0 +1,212 @@
+.loading-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.loading-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 40px 32px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease-in-out;
+  position: relative; /* 为关闭按钮定位 */
+}
+
+/* 关闭按钮 */
+.loading-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  border-radius: 50%;
+  transition: all 0.2s ease-in-out;
+  padding: 0;
+  z-index: 10;
+}
+
+.loading-modal-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.loading-modal-close:active {
+  transform: scale(0.95);
+}
+
+.loading-modal-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Logo 区域 */
+.loading-modal-logo {
+  margin-bottom: 24px;
+}
+
+.loading-logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 4px;
+  position: relative;
+  height: 60px;
+}
+
+.loading-logo-square {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 4px;
+  animation: logoFloat 2s ease-in-out infinite;
+}
+
+.loading-logo-square-1 {
+  animation-delay: 0s;
+  transform: translateY(-8px);
+}
+
+.loading-logo-square-2 {
+  animation-delay: 0.2s;
+  transform: translateY(-4px);
+}
+
+.loading-logo-square-3 {
+  animation-delay: 0.4s;
+  transform: translateY(0);
+}
+
+.loading-logo-square-4 {
+  animation-delay: 0.6s;
+  transform: translateY(-4px);
+}
+
+.loading-logo-square-5 {
+  animation-delay: 0.8s;
+  transform: translateY(-8px);
+}
+
+/* 标题 */
+.loading-modal-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 12px 0;
+  animation: fadeInUp 0.5s ease-in-out 0.2s both;
+}
+
+/* 消息 */
+.loading-modal-message {
+  font-size: 16px;
+  color: #666;
+  margin: 0 0 32px 0;
+  animation: fadeInUp 0.5s ease-in-out 0.3s both;
+}
+
+/* 加载动画 */
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.spinner-circle {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f0f0f0;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes logoFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .loading-modal {
+    padding: 32px 24px;
+    max-width: 90%;
+  }
+
+  .loading-modal-title {
+    font-size: 24px;
+  }
+
+  .loading-modal-message {
+    font-size: 14px;
+  }
+
+  .loading-logo-square {
+    width: 20px;
+    height: 20px;
+  }
+}
+

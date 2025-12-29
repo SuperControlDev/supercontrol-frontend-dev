@@ -2,7 +2,10 @@
   min-height: 100vh;
   display: flex;
   width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
+  margin: 0;
+  padding: 0;
 }
 
 /* PC 레이아웃: 좌우 분할 */
@@ -19,6 +22,9 @@
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
+    width: 100%;
+    margin: 0;
+    padding: 0;
   }
 }
 

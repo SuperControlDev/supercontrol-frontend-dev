@@ -89,9 +89,13 @@ const MyPage: React.FC = () => {
         // profile API에서 무료 티켓 가져오기
         if (userData.free_tickets !== undefined) {
           setFreeTickets(userData.free_tickets);
+          // localStorage에 티켓 수 저장 (GamePage에서 사용)
+          localStorage.setItem('tickets', String(userData.free_tickets));
+          console.log('[MyPage] 티켓 수 저장:', userData.free_tickets);
         } else {
           console.warn('[MyPage] Profile API가 free_tickets를 반환하지 않았습니다. 기본값 0 사용');
           setFreeTickets(0);
+          localStorage.setItem('tickets', '0');
         }
       } catch (err) {
         console.error('[MyPage] 사용자 정보 가져오기 실패:', err);
